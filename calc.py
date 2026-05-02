@@ -66,6 +66,16 @@ if __name__ == "__main__":
         SoilLayer("中风化粉砂岩粉砂岩", 25.6, 22.2, 55.1, 30.7)
     ]
 
+    print(f"{'土层名称':<20} | {'内摩擦角(°)':<10} | {'Ka (主动)':<12} | {'Kp (被动)':<12} | {'2cKa^1/2:<12'} | {'2cKp^1/2:<12'} |")
+    print("-" * 55)
+
+    for layer in layers:
+        ka = layer.active_coefficient()
+        kp = layer.passive_coefficient()
+
+        ka_2 = layer.active_cohesion_term()
+        kp_2 = layer.passive_cohesion_term()
+        print(f"{layer.name:<20} | {layer.friction_angle:<10} | {ka:<12.1f} | {kp:<12.1f} | {ka_2:<12.2f} |{kp_2:<12.2f}")
 
     # 计算被动土压力
     depth = 8.5
