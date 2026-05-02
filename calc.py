@@ -32,7 +32,29 @@ class SoilLayer:
         kp_2 = 2 * layer.cohesion * round(math.sqrt(self.passive_coefficient()), 3)
         return kp_2
 
+def passive_pressure_at_depth(layers, depth):
+    z_top = 0.0
 
+    for i,layer in enumerate(layers):
+        z_bottom = z_top + layer.thickness
+        #print(z_bottom)
+
+        if z_top <= depth <= z_bottom:
+            pp_depth = 2 * layer.cohesion * math.sqrt(layer.passive_coefficient())
+
+            pp_bottom = (z_bottom - depth) * layer.unit_weight * layer.passive_coefficient() + pp_depth
+
+            pp_top = None
+            if i + 1 < len(layers):
+                next_layer = layers[i+1]
+                kp_next = next_layer.passive_coefficient()
+                pp_top = (z_bottom - depth) * next_layer.unit_weight * kp_next + 2 * next_layer.cohesion * math.sqrt(kp_next)
+
+            return i, pp_depth, pp_bottom, pp_top
+        z_top = z_bottom
+
+
+    
 if __name__ == "__main__":
     layers = [
         SoilLayer("杂填土", 0.6, 18.2, 6.0, 12.3),
@@ -43,3 +65,12 @@ if __name__ == "__main__":
         SoilLayer("强风化粉砂岩", 7.4, 21.0, 28.5, 22.5),
         SoilLayer("中风化粉砂岩粉砂岩", 25.6, 22.2, 55.1, 30.7)
     ]
+
+
+    # 计算被动土压力
+    depth = 8.5
+    i, pp_depth, pp_bottom, pp_top = passive_pressure_at_depth(layers, depth)
+    print(f"深度{depth}m 的被动土压力为 {pp_depth:.3f}")
+    print(f"深度{depth}m 下土层底部的被动土压力为 {pp_bottom:.3f}")
+    print(f"深度{depth}m 下土层顶部的被动土压力为 {pp_top:.3f}")
+
