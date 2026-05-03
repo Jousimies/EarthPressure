@@ -76,10 +76,6 @@ def passive_pressure_at_depth(layers, depth_excavation):
         z_top = z_bottom
 
 def find_critical_depth(layers, pa_top_list, pa_bottom_list, overload):
-    """
-    严格按照图像公式反算 z0
-    逻辑：当判定 Pa 在某层穿过 0 时，利用该层的 gamma, Ka, cohesion 反解方程
-    """
     current_sigma_v = overload
     cumulative_height = 0.0
     critical_depths = []
@@ -88,14 +84,9 @@ def find_critical_depth(layers, pa_top_list, pa_bottom_list, overload):
         p_top = pa_top_list[i]
         p_bottom = pa_bottom_list[i]
 
-        # 判定压力在该层内是否经过 0 点
         if p_top * p_bottom <= 0:
             ka = layer.active_coefficient()
             c_term = layer.active_cohesion_term()
-            
-            # 方程：(current_sigma_v + gamma * delta_z) * ka - c_term = 0
-            # 变形得：gamma * delta_z = (c_term / ka) - current_sigma_v
-            # delta_z = ((c_term / ka) - current_sigma_v) / gamma
             
             delta_z = ((c_term / ka) - current_sigma_v) / layer.unit_weight
             absolute_z = cumulative_height + delta_z
@@ -106,20 +97,16 @@ def find_critical_depth(layers, pa_top_list, pa_bottom_list, overload):
                 "absolute_z": round(absolute_z, 4)
             })
 
-        # 累加竖向应力和高度，为下一层反算做准备
         current_sigma_v += layer.unit_weight * layer.thickness
         cumulative_height += layer.thickness
 
     return critical_depths
 
 def find_layer_at_depth(layers, target_depth):
-    """
-    查找指定深度所在的土层信息
-    """
+
     cumulative_h = 0.0
     
     for i, layer in enumerate(layers):
-        # 判断目标深度是否落在当前层范围内
         if cumulative_h <= target_depth < (cumulative_h + layer.thickness):
             relative_depth = target_depth - cumulative_h
             return {
@@ -130,7 +117,6 @@ def find_layer_at_depth(layers, target_depth):
         
         cumulative_h += layer.thickness
     
-    # 如果深度正好等于总厚度，归为最后一层
     if abs(target_depth - cumulative_h) < 1e-6:
         return {
             'index': len(layers) - 1,
@@ -139,7 +125,7 @@ def find_layer_at_depth(layers, target_depth):
             'top_depth': cumulative_h - layers[-1].thickness
         }
 
-    return None # 深度超出土层范围
+    return None
 
 def find_inflection_point(pp_depth, pp_bottom, pa_top, pa_bottom, depth_excavation):
     if pp_depth > pa_top and pp_bottom > pa_bottom:
