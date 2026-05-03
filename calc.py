@@ -18,9 +18,8 @@ class SoilLayer:
         return ka
 
     def active_cohesion_term(self):
-        phi_rad = math.radians(self.friction_angle)
-        ka_2 = 2 * layer.cohesion * math.sqrt((math.tan(math.pi/4 - phi_rad/2)) ** 2)
-        return ka_2
+        ka = self.active_coefficient()
+        return 2 * self.cohesion * math.sqrt(ka)
     
     def passive_coefficient(self):
         """被动土压力系数 Kp"""
@@ -29,9 +28,29 @@ class SoilLayer:
         return kp
 
     def passive_cohesion_term(self):
-        kp_2 = 2 * layer.cohesion * round(math.sqrt(self.passive_coefficient()), 3)
-        return kp_2
+        kp = self.passive_coefficient()
+        return 2 * self.cohesion * math.sqrt(kp)
 
+def active_pressure_multi_layer(layers, overload):
+    current_sigma_v = overload
+    cumulative_force = 0
+
+    pa_top_list = []
+    pa_bottom_list = []
+    
+    for i, layer in enumerate(layers):
+        ka = layer.active_coefficient()
+        cohesion_term = layer.active_cohesion_term()
+
+        pa_top = current_sigma_v * ka - cohesion_term
+        next_sigma_v = current_sigma_v + layer.unit_weight * layer.thickness
+        pa_bottom = next_sigma_v * ka - cohesion_term
+        current_sigma_v = next_sigma_v
+
+        pa_top_list.append(pa_top)
+        pa_bottom_list.append(pa_bottom)
+    return pa_top_list,pa_bottom_list
+    
 def passive_pressure_at_depth(layers, depth):
     z_top = 0.0
 
@@ -77,6 +96,11 @@ if __name__ == "__main__":
         kp_2 = layer.passive_cohesion_term()
         print(f"{layer.name:<20} | {layer.friction_angle:<10} | {ka:<12.1f} | {kp:<12.1f} | {ka_2:<12.2f} |{kp_2:<12.2f}")
 
+    # 计算主动土压力
+    overload = 30.0             # 地面超载
+    result = active_pressure_multi_layer(layers, overload)
+    print(result)
+    
     # 计算被动土压力
     depth = 8.5
     i, pp_depth, pp_bottom, pp_top = passive_pressure_at_depth(layers, depth)
