@@ -72,7 +72,42 @@ def passive_pressure_at_depth(layers, depth):
             return i, pp_depth, pp_bottom, pp_top
         z_top = z_bottom
 
+def find_critical_depth(layers, pa_top_list, pa_bottom_list, overload):
+    """
+    严格按照图像公式反算 z0
+    逻辑：当判定 Pa 在某层穿过 0 时，利用该层的 gamma, Ka, cohesion 反解方程
+    """
+    current_sigma_v = overload
+    cumulative_height = 0.0
+    critical_depths = []
 
+    for i, layer in enumerate(layers):
+        p_top = pa_top_list[i]
+        p_bottom = pa_bottom_list[i]
+
+        # 判定压力在该层内是否经过 0 点
+        if p_top * p_bottom <= 0:
+            ka = layer.active_coefficient()
+            c_term = layer.active_cohesion_term()
+            
+            # 方程：(current_sigma_v + gamma * delta_z) * ka - c_term = 0
+            # 变形得：gamma * delta_z = (c_term / ka) - current_sigma_v
+            # delta_z = ((c_term / ka) - current_sigma_v) / gamma
+            
+            delta_z = ((c_term / ka) - current_sigma_v) / layer.unit_weight
+            absolute_z = cumulative_height + delta_z
+                
+            critical_depths.append({
+                "layer_name": layer.name,
+                "delta_z": round(delta_z, 4),
+                "absolute_z": round(absolute_z, 4)
+            })
+
+        # 累加竖向应力和高度，为下一层反算做准备
+        current_sigma_v += layer.unit_weight * layer.thickness
+        cumulative_height += layer.thickness
+
+    return critical_depths
     
 if __name__ == "__main__":
     layers = [
@@ -108,3 +143,6 @@ if __name__ == "__main__":
     print(f"深度{depth}m 下土层底部的被动土压力为 {pp_bottom:.3f}")
     print(f"深度{depth}m 下土层顶部的被动土压力为 {pp_top:.3f}")
 
+    # 计算临界深度
+    result_critial_depth = find_critical_depth(layers, result[0], result[1], overload)
+    print(result_critial_depth)
