@@ -75,7 +75,7 @@ def passive_pressure_at_depth(layers, depth_excavation):
             return i, pp_depth, pp_bottom, pp_top
         z_top = z_bottom
 
-def find_critical_depth(layers, pa_top_list, pa_bottom_list, overload):
+def find_critical_depth(layers, pa_top_list, pa_bottom_list, overload, pile_z):
     current_sigma_v = overload
     cumulative_height = 0.0
     critical_depths = []
@@ -90,13 +90,13 @@ def find_critical_depth(layers, pa_top_list, pa_bottom_list, overload):
             
             delta_z = ((c_term / ka) - current_sigma_v) / layer.unit_weight
             absolute_z = cumulative_height + delta_z
+            if absolute_z > pile_z:
+                critical_depths.append({
+                    "layer_name": layer.name,
+                    "delta_z": round(delta_z, 4),
+                    "absolute_z": round(absolute_z, 4)
+                })
                 
-            critical_depths.append({
-                "layer_name": layer.name,
-                "delta_z": round(delta_z, 4),
-                "absolute_z": round(absolute_z, 4)
-            })
-
         current_sigma_v += layer.unit_weight * layer.thickness
         cumulative_height += layer.thickness
 
@@ -194,7 +194,45 @@ def passive_pressure_at_inflection_point(layers, inflection_point_depth, excavat
         
         cumulative_h = layer_bottom_depth
     
+def calculate_segment_force(layers, depth, pa_top_list, pa_bottom_list):
+    cumulative_h = 0.0
+    
+    for i, layer in enumerate(layers):
+        layer_top_z = cumulative_h
+        layer_bottom_z = cumulative_h + layer.thickness
+
+        if pa_top_list[i] < 0:
+            pa_top = 0
+        else:
+            pa_top = pa_top_list[i]
+        if pa_bottom_list[i] >=0:
+            pa_bottom = pa_bottom_list[i]
+            
+        # if layer_top_z > depth:
+        #     break
         
+        segment_force = (layer_bottom_z - depth) * (pa_top + pa_bottom) /2
+        h = (layer_bottom_z - depth) / 3 * (2* pa_top + pa_bottom)/(pa_top + pa_bottom)
+        
+        cumulative_h = layer_bottom_z
+
+        if cumulative_h >= depth:
+            break
+    return segment_force,h
+
+def calculate_force_at_inflection_point(layers, depth, pa_top, pa_bottom):
+    cumulative_h = 0.0
+
+    for i, layer in enumerate(layers):
+        layer_top_z = cumulative_h
+        layer_bottom_z = cumulative_h + layer.thickness
+
+        if layer_bottom_z >= depth and layer_top_z <= depth:
+            segment_force = (depth - layer_top_z) * (pa_top + pa_bottom) /2
+            h = (depth - layer_top_z) / 3 * (2* pa_top + pa_bottom)/(pa_top + pa_bottom)
+        cumulative_h = layer_bottom_z
+    return segment_force, h
+
 if __name__ == "__main__":
     layers = [
         SoilLayer("杂填土", 0.6, 18.2, 6.0, 12.3),
@@ -206,9 +244,9 @@ if __name__ == "__main__":
         SoilLayer("中风化粉砂岩粉砂岩", 25.6, 22.2, 55.1, 30.7)
     ]
 
+    print('-'*50 + '土层参数' + '-'*50)
     print(f"{'土层名称':<20} | {'内摩擦角(°)':<10} | {'Ka (主动)':<12} | {'Kp (被动)':<12} | {'2cKa^1/2:<12'} | {'2cKp^1/2:<12'} |")
-    print("-" * 55)
-
+    
     for layer in layers:
         ka = layer.active_coefficient()
         kp = layer.passive_coefficient()
@@ -217,31 +255,76 @@ if __name__ == "__main__":
         kp_2 = layer.passive_cohesion_term()
         print(f"{layer.name:<20} | {layer.friction_angle:<10} | {ka:<12.1f} | {kp:<12.1f} | {ka_2:<12.2f} |{kp_2:<12.2f}")
 
+    print('='*50 + '土层参数结束' + '='*50)
+    
     # 计算主动土压力
     overload = 30.0             # 地面超载
     pa_top_list, pa_bottom_list = active_pressure_multi_layer(layers, overload)
-    print(pa_top_list)
-    
-    # 计算被动土压力
-    depth_excavation = 8.5
-    i, pp_depth, pp_bottom, pp_top = passive_pressure_at_depth(layers, depth_excavation)
-    print(f"深度{depth_excavation}m 的被动土压力为 {pp_depth:.3f}")
-    print(f"深度{depth_excavation}m 下土层底部的被动土压力为 {pp_bottom:.3f}")
-    print(f"深度{depth_excavation}m 下土层顶部的被动土压力为 {pp_top:.3f}")
 
+    print('-'*50 + '主动土压力' + '-'*50)
+    for i in range(len(pa_top_list)):
+        print(f"第{i+1}层土顶主动土压力为：{round(pa_top_list[i], 2)} kPa")
+        print(f"第{i+1}层土底主动土压力为：{round(pa_bottom_list[i], 2)} kPa")
+
+    print('='*50 + '主动土压力结束' + '='*50)
+
+    # 计算被动土压力
+    print('-'*50 + '被动土压力' + '-'*50)
+    depth_excavation = 13
+    i, pp_depth, pp_bottom, pp_top = passive_pressure_at_depth(layers, depth_excavation)
+    print(f"深度{depth_excavation}m 的被动土压力为 {pp_depth:.3f} kPa")
+    print(f"深度{depth_excavation}m 下土层底部的被动土压力为 {pp_bottom:.3f} kPa")
+    print(f"深度{depth_excavation}m 下土层顶部的被动土压力为 {pp_top:.3f} kPa")
+
+    print('='*50 + '被动土压力结束' + '='*50)
+    
     # 计算临界深度
-    result_critial_depth = find_critical_depth(layers, pa_top_list, pa_bottom_list, overload)
+    print('-'*50 + '临界深度' + '-'*50)
+    pile_top_depth = 1.5        # 桩顶标高
+    result_critial_depth = find_critical_depth(layers, pa_top_list, pa_bottom_list, overload, pile_top_depth)
+    for i in range(len(result_critial_depth)):
+        print(f'临界深度z{1}位于地面以下 {round(result_critial_depth[i]['absolute_z'], 1)} m')
     print(result_critial_depth)
+    print('='*50 + '临界深度结束' + '='*50)
 
     # 开挖深度所在土层
-    layer_at_depth = find_layer_at_depth(layers, depth_excavation)
-    layer_index = layer_at_depth['index']
-    print(layer_at_depth)
+    layer_at_depth_excavation = find_layer_at_depth(layers, depth_excavation)
+    layer_at_depth_excavation_index = layer_at_depth_excavation['index']
+    print(layer_at_depth_excavation)
+    
     # 计算反弯点
-    depth_inflection_point = find_inflection_point(pp_depth, pp_bottom, pa_top_list[layer_index], pa_bottom_list[layer_index], depth_excavation)
-    print(depth_inflection_point)
-    pa_inflection_point = active_pressure_at_inflection_point(layers, depth_inflection_point, overload)
-    print(pa_inflection_point)
-    pp_inflection_point = passive_pressure_at_inflection_point(layers, depth_inflection_point, depth_excavation)
-    print(pp_inflection_point)
+    depth_inflection_point = find_inflection_point(pp_depth, pp_bottom, pa_top_list[layer_at_depth_excavation_index], pa_bottom_list[layer_at_depth_excavation_index], depth_excavation)
+    print(f'反弯点位置为：{depth_inflection_point}m')
+    pa_inflection_point = round(active_pressure_at_inflection_point(layers, depth_inflection_point, overload), 2)
+    print(f'反弯点主动土压力为：{pa_inflection_point} kPa')
+    pp_inflection_point = round(passive_pressure_at_inflection_point(layers, depth_inflection_point, depth_excavation), 2)
+    print(f'反弯点被动土压力为：{pp_inflection_point} kPa')
+    
+    # 计算主动土压力合力点
+    resultant_force_point = [round(result_critial_depth[0]['absolute_z'], 1), round(result_critial_depth[1]['absolute_z'], 1)]
+
+    active_force_list = []
+    active_h_list = []
+    
+    # 计算临界深度处的主动土压力合力及形心位置
+    for i in range(len(resultant_force_point)):
+        force_segment, h = calculate_segment_force(layers, resultant_force_point[i], pa_top_list, pa_bottom_list)
+        active_force_list.append(round(force_segment, 2))
+        active_h_list.append(round(h, 2))
+
+
+    # 计算反弯点处的主动土压力合力及形心位置
+    layer_at_inflection_point = find_layer_at_depth(layers, depth_inflection_point)
+    layer_at_inflection_point_index = layer_at_inflection_point['index']
+    force_inflection, h_inflection = calculate_force_at_inflection_point(layers, depth_inflection_point, pa_top_list[layer_at_inflection_point_index], pa_inflection_point)
+
+    active_force_list.append(round(force_inflection, 2))
+    active_h_list.append(round(h_inflection, 2))
+
+    print(active_force_list)
+    print(active_h_list)
+
+    # 计算被动土压力合力及作用点
+    
+    
     
