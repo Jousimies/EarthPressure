@@ -60,7 +60,6 @@ def passive_pressure_at_depth(layers, depth_excavation):
 
     for i,layer in enumerate(layers):
         z_bottom = z_top + layer.thickness
-        #print(z_bottom)
 
         if z_top <= depth_excavation <= z_bottom:
             pp_depth = 2 * layer.cohesion * math.sqrt(layer.passive_coefficient())
@@ -146,6 +145,70 @@ def find_inflection_point(pp_depth, pp_bottom, pa_top, pa_bottom, depth_excavati
     if pp_depth > pa_top and pp_bottom > pa_bottom:
         return 1.2 * depth_excavation
 
+def active_pressure_at_inflection_point(layers, inflection_point_depth, overload):
+    cumulative_h = 0.0
+    current_sigma_v = overload
+    
+    for i, layer in enumerate(layers):
+        layer_bottom_depth = cumulative_h + layer.thickness
+        if cumulative_h <= inflection_point_depth <= layer_bottom_depth:
+            dz = inflection_point_depth - cumulative_h
+            
+            sigma_z = current_sigma_v + layer.unit_weight * dz
+            
+            ka = layer.active_coefficient()
+            c_term = layer.active_cohesion_term()
+            
+            pa_at_depth = sigma_z * ka - c_term
+            
+            return max(0, pa_at_depth)
+        
+        current_sigma_v += layer.unit_weight * layer.thickness
+        cumulative_h = layer_bottom_depth
+
+
+def passive_pressure_at_inflection_point(layers, inflection_point_depth, excavation_depth):
+
+    dz_from_excavation = inflection_point_depth - excavation_depth
+    
+    cumulative_h = 0.0
+
+    current_sigma_v_passive = 0.0 
+    
+    for i, layer in enumerate(layers):
+        layer_bottom_depth = cumulative_h + layer.thickness
+        
+        if cumulative_h <= inflection_point_depth <= layer_bottom_depth:
+
+            dz_in_layer = inflection_point_depth - cumulative_h
+            
+            sigma_v_p = 0.0
+            temp_h = 0.0
+            for j in range(len(layers)):
+                l = layers[j]
+                l_top = temp_h
+                l_bot = temp_h + l.thickness
+                
+                overlap_top = max(excavation_depth, l_top)
+                overlap_bot = min(inflection_point_depth, l_bot)
+                
+                if overlap_bot > overlap_top:
+                    sigma_v_p += (overlap_bot - overlap_top) * l.unit_weight
+                
+                temp_h = l_bot
+                if temp_h >= inflection_point_depth:
+                    break
+
+            kp = layer.passive_coefficient()
+            cp_term = layer.passive_cohesion_term()
+            
+            pp_inflection_point = sigma_v_p * kp + cp_term
+            
+            return pp_inflection_point
+        
+        cumulative_h = layer_bottom_depth
+    
+        
 if __name__ == "__main__":
     layers = [
         SoilLayer("杂填土", 0.6, 18.2, 6.0, 12.3),
@@ -190,4 +253,9 @@ if __name__ == "__main__":
     print(layer_at_depth)
     # 计算反弯点
     depth_inflection_point = find_inflection_point(pp_depth, pp_bottom, pa_top_list[layer_index], pa_bottom_list[layer_index], depth_excavation)
-    print(result)
+    print(depth_inflection_point)
+    pa_inflection_point = active_pressure_at_inflection_point(layers, depth_inflection_point, overload)
+    print(pa_inflection_point)
+    pp_inflection_point = passive_pressure_at_inflection_point(layers, depth_inflection_point, depth_excavation)
+    print(pp_inflection_point)
+    
