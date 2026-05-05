@@ -231,6 +231,67 @@ def fill_inflection_point_data(inflection_point, excavation_depth, z_axis_data):
     
     return inflection_point
 
+def find_layer_at_depth(z_axis_data, target_depth, tolerance=1e-6):
+    """
+    在 z_data 中根据深度定位 nominal_z 所在的土层。
+    共享界面深度优先归属到下伏土层，避免插入到上一层 BOTTOM 与下一层 TOP 之间。
+    """
+    layer_bounds = {}
+
+    for idx, point in enumerate(z_axis_data):
+        bounds = layer_bounds.setdefault(point.layer_index, {"top": None, "bottom": None, "indices": []})
+        bounds["indices"].append(idx)
+
+        if point.position == "TOP" and bounds["top"] is None:
+            bounds["top"] = point
+        elif point.position == "BOTTOM":
+            bounds["bottom"] = point
+
+    ordered_layers = sorted(
+        (bounds for bounds in layer_bounds.values() if bounds["top"] and bounds["bottom"]),
+        key=lambda item: item["top"].z
+    )
+
+    for pos, bounds in enumerate(ordered_layers):
+        top_z = bounds["top"].z
+        bottom_z = bounds["bottom"].z
+        is_last_layer = pos == len(ordered_layers) - 1
+
+        if top_z - tolerance <= target_depth < bottom_z:
+            return bounds
+
+        if abs(target_depth - top_z) <= tolerance:
+            return bounds
+
+        if is_last_layer and abs(target_depth - bottom_z) <= tolerance:
+            return bounds
+
+    return None
+
+def find_insert_index_in_layer(z_axis_data, layer_info, target_depth, tolerance=1e-6):
+    """
+    计算反弯点在目标土层中的插入位置，确保落在该层 TOP 与 BOTTOM 之间。
+    """
+    insert_index = layer_info["indices"][-1]
+
+    for idx in layer_info["indices"]:
+        point = z_axis_data[idx]
+
+        if point.z < target_depth - tolerance:
+            insert_index = idx + 1
+            continue
+
+        if abs(point.z - target_depth) <= tolerance:
+            if point.position == "TOP":
+                return idx + 1
+            if point.position == "BOTTOM":
+                return idx
+            return idx + 1
+
+        return idx
+
+    return insert_index
+
 def find_and_insert_inflection_point(z_axis_data, excavation_depth):
     """
     寻找反弯点：优先寻找 Pa - Pp = 0 的解析点；
@@ -254,23 +315,23 @@ def find_and_insert_inflection_point(z_axis_data, excavation_depth):
     # 2. 如果没有找到零点（坑底土层太强），执行退路逻辑
     if not found_parse_point:
         nominal_z = round(1.2 * excavation_depth, 3)
-        
-        # 在 z_data 中寻找 nominal_z 所在的土层
-        for i in range(len(z_axis_data) - 1):
-            if z_axis_data[i].z <= nominal_z <= z_axis_data[i+1].z:
-                layer = z_axis_data[i].layer
-                
-                # 创建名义反弯点
-                inflection_point = AnalysisPoint(nominal_z, "MID", i, layer)
-                inflection_point.point_type = "Inflection"
-                inflection_point.layer_name = f"{layer.name}"
-                
-                # 在该深度处补算一次 pa 和 pp 保证数据完整
-                fill_inflection_point_data(inflection_point, excavation_depth, z_axis_data)
-                z_axis_data.insert(i + 1, inflection_point)
-                print(f"提示：未发现自然土压力零点，已取 1.2H ({nominal_z}m) 作为名义零点。")
-                return True
-                
+
+        layer_info = find_layer_at_depth(z_axis_data, nominal_z)
+        if layer_info:
+            layer = layer_info["top"].layer
+
+            # 创建名义反弯点
+            inflection_point = AnalysisPoint(nominal_z, "MID", layer_info["top"].layer_index, layer)
+            inflection_point.point_type = "Inflection"
+            inflection_point.layer_name = f"{layer.name}"
+
+            # 在该深度处补算一次 pa 和 pp 保证数据完整
+            fill_inflection_point_data(inflection_point, excavation_depth, z_axis_data)
+            insert_index = find_insert_index_in_layer(z_axis_data, layer_info, nominal_z)
+            z_axis_data.insert(insert_index, inflection_point)
+            print(f"提示：未发现自然土压力零点，已取 1.2H ({nominal_z}m) 作为名义零点。")
+            return True
+                 
     return False
 
 def calculate_force_and_centroid(p1, p2, force_type="pa"):
