@@ -233,6 +233,9 @@ def calculate_force_at_inflection_point(layers, depth, pa_top, pa_bottom):
         cumulative_h = layer_bottom_z
     return segment_force, h
 
+def calc_passive_force():
+    pass
+
 if __name__ == "__main__":
     layers = [
         SoilLayer("杂填土", 0.6, 18.2, 6.0, 12.3),
@@ -270,12 +273,17 @@ if __name__ == "__main__":
 
     # 计算被动土压力
     print('-'*50 + '被动土压力' + '-'*50)
-    depth_excavation = 13
+    passive_pressure_list = []
+    
+    depth_excavation = 8.5
     i, pp_depth, pp_bottom, pp_top = passive_pressure_at_depth(layers, depth_excavation)
     print(f"深度{depth_excavation}m 的被动土压力为 {pp_depth:.3f} kPa")
     print(f"深度{depth_excavation}m 下土层底部的被动土压力为 {pp_bottom:.3f} kPa")
     print(f"深度{depth_excavation}m 下土层顶部的被动土压力为 {pp_top:.3f} kPa")
 
+    passive_pressure_list.append(round(pp_depth, 2))
+    passive_pressure_list.append(round(pp_bottom, 2))
+    passive_pressure_list.append(round(pp_top, 2))
     print('='*50 + '被动土压力结束' + '='*50)
     
     # 计算临界深度
@@ -299,6 +307,8 @@ if __name__ == "__main__":
     print(f'反弯点主动土压力为：{pa_inflection_point} kPa')
     pp_inflection_point = round(passive_pressure_at_inflection_point(layers, depth_inflection_point, depth_excavation), 2)
     print(f'反弯点被动土压力为：{pp_inflection_point} kPa')
+
+    passive_pressure_list.append(pp_inflection_point)
     
     # 计算主动土压力合力点
     resultant_force_point = [round(result_critial_depth[0]['absolute_z'], 1), round(result_critial_depth[1]['absolute_z'], 1)]
@@ -324,7 +334,9 @@ if __name__ == "__main__":
     print(active_force_list)
     print(active_h_list)
 
-    # 计算被动土压力合力及作用点
+    # 计算被动土压力合力及作用点    
+    print(passive_pressure_list)
+    
     
     
     
