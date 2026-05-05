@@ -322,6 +322,7 @@ def identify_business_intervals(z_data, target_types=None):
         "Excavation": {"direction": 1, "boundary": "BOTTOM"}  # 新增：向下找层底
     }
     
+    # 深度比较容差：用于处理浮点误差与同深度接口点（上一层底=下一层顶）
     z_tolerance = 1e-6
     point_index_map = {id(point): idx for idx, point in enumerate(z_data)}
     
@@ -359,14 +360,14 @@ def identify_business_intervals(z_data, target_types=None):
     # 补齐“向下区间”与“反弯点向上区间”之间跨层缺失区间
     # 典型场景：开挖较深时，反弯点在更深土层，导致中间层段遗漏
     if "Inflection" in target_types and down_intervals and up_intervals:
-        bridge_start = max((seg[1] for seg in down_intervals), key=lambda p: p.z)
-        bridge_end = min((seg[0] for seg in up_intervals), key=lambda p: p.z)
+        deepest_down_point = max((seg[1] for seg in down_intervals), key=lambda p: p.z)
+        shallowest_up_point = min((seg[0] for seg in up_intervals), key=lambda p: p.z)
         
-        if bridge_start.z < bridge_end.z - z_tolerance:
-            start_idx = point_index_map[id(bridge_start)]
-            end_idx = point_index_map[id(bridge_end)]
+        if deepest_down_point.z < shallowest_up_point.z - z_tolerance:
+            start_idx = point_index_map[id(deepest_down_point)]
+            end_idx = point_index_map[id(shallowest_up_point)]
             
-            prev = bridge_start
+            prev = deepest_down_point
             for k in range(start_idx + 1, end_idx + 1):
                 curr = z_data[k]
                 
