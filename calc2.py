@@ -262,9 +262,6 @@ def find_layer_at_depth(z_axis_data, target_depth, tolerance=1e-6):
         bottom_z = bounds["bottom"].z
         is_last_layer = pos == len(ordered_layers) - 1
 
-        if top_z - tolerance <= target_depth < bottom_z:
-            return bounds
-
         if abs(target_depth - top_z) <= tolerance:
             result = dict(bounds)
 
@@ -274,6 +271,9 @@ def find_layer_at_depth(z_axis_data, target_depth, tolerance=1e-6):
                 result["insert_index"] = result["top_index"] + 1
 
             return result
+
+        if top_z - tolerance <= target_depth < bottom_z:
+            return bounds
 
         if is_last_layer and abs(target_depth - bottom_z) <= tolerance:
             result = dict(bounds)
