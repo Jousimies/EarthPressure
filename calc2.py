@@ -234,18 +234,23 @@ def fill_inflection_point_data(inflection_point, excavation_depth, z_axis_data):
 def find_layer_at_depth(z_axis_data, target_depth, tolerance=1e-6):
     """
     在 z_data 中根据深度定位 nominal_z 所在的土层。
-    共享界面深度优先归属到下伏土层，避免插入到上一层 BOTTOM 与下一层 TOP 之间。
+    共享界面深度归属到下伏土层，但插入位置应落在上一层 BOTTOM 与下一层 TOP 之间。
     """
     layer_bounds = {}
 
     for idx, point in enumerate(z_axis_data):
-        bounds = layer_bounds.setdefault(point.layer_index, {"top": None, "bottom": None, "indices": []})
+        bounds = layer_bounds.setdefault(
+            point.layer_index,
+            {"top": None, "top_index": None, "bottom": None, "bottom_index": None, "indices": []}
+        )
         bounds["indices"].append(idx)
 
         if point.position == "TOP" and bounds["top"] is None:
             bounds["top"] = point
+            bounds["top_index"] = idx
         elif point.position == "BOTTOM":
             bounds["bottom"] = point
+            bounds["bottom_index"] = idx
 
     ordered_layers = sorted(
         (bounds for bounds in layer_bounds.values() if bounds["top"] and bounds["bottom"]),
@@ -261,10 +266,19 @@ def find_layer_at_depth(z_axis_data, target_depth, tolerance=1e-6):
             return bounds
 
         if abs(target_depth - top_z) <= tolerance:
-            return bounds
+            result = dict(bounds)
+
+            if pos > 0 and abs(ordered_layers[pos - 1]["bottom"].z - top_z) <= tolerance:
+                result["insert_index"] = result["top_index"]
+            else:
+                result["insert_index"] = result["top_index"] + 1
+
+            return result
 
         if is_last_layer and abs(target_depth - bottom_z) <= tolerance:
-            return bounds
+            result = dict(bounds)
+            result["insert_index"] = result["bottom_index"]
+            return result
 
     return None
 
@@ -272,6 +286,9 @@ def find_insert_index_in_layer(z_axis_data, layer_info, target_depth, tolerance=
     """
     计算反弯点在目标土层中的插入位置，确保落在该层 TOP 与 BOTTOM 之间。
     """
+    if "insert_index" in layer_info:
+        return layer_info["insert_index"]
+
     insert_index = layer_info["indices"][-1]
 
     for idx in layer_info["indices"]:
