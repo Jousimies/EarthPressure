@@ -324,7 +324,7 @@ def identify_business_intervals(z_data, target_types=None):
     
     # 深度比较容差：用于处理浮点误差与同深度接口点（上一层底=下一层顶）
     z_tolerance = 1e-6
-    point_index_map = {id(point): idx for idx, point in enumerate(z_data)}
+    point_index_map = {point: idx for idx, point in enumerate(z_data)}
     
     intervals = []
     down_intervals = []
@@ -364,8 +364,8 @@ def identify_business_intervals(z_data, target_types=None):
         shallowest_up_point = min((seg[0] for seg in up_intervals), key=lambda p: p.z)
         
         if deepest_down_point.z < shallowest_up_point.z - z_tolerance:
-            start_idx = point_index_map[id(deepest_down_point)]
-            end_idx = point_index_map[id(shallowest_up_point)]
+            start_idx = point_index_map[deepest_down_point]
+            end_idx = point_index_map[shallowest_up_point]
             
             prev = deepest_down_point
             for k in range(start_idx + 1, end_idx + 1):
