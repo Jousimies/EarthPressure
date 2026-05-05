@@ -322,6 +322,9 @@ def identify_business_intervals(z_data, target_types=None):
         "Excavation": {"direction": 1, "boundary": "BOTTOM"}  # 新增：向下找层底
     }
     
+    z_tolerance = 1e-6
+    point_index_map = {id(point): idx for idx, point in enumerate(z_data)}
+    
     intervals = []
     down_intervals = []
     up_intervals = []
@@ -359,16 +362,16 @@ def identify_business_intervals(z_data, target_types=None):
         bridge_start = max((seg[1] for seg in down_intervals), key=lambda p: p.z)
         bridge_end = min((seg[0] for seg in up_intervals), key=lambda p: p.z)
         
-        if bridge_start.z < bridge_end.z - 1e-6:
-            start_idx = z_data.index(bridge_start)
-            end_idx = z_data.index(bridge_end)
+        if bridge_start.z < bridge_end.z - z_tolerance:
+            start_idx = point_index_map[id(bridge_start)]
+            end_idx = point_index_map[id(bridge_end)]
             
             prev = bridge_start
             for k in range(start_idx + 1, end_idx + 1):
                 curr = z_data[k]
                 
                 # 同深度接口点（上一层底=下一层顶）只更新锚点，不形成区间
-                if curr.z <= prev.z + 1e-6:
+                if abs(curr.z - prev.z) < z_tolerance:
                     prev = curr
                     continue
                 
