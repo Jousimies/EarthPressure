@@ -323,6 +323,8 @@ def identify_business_intervals(z_data, target_types=None):
     }
     
     intervals = []
+    down_intervals = []
+    up_intervals = []
     
     for i, p in enumerate(z_data):
         # 只有当点的类型在目标列表且有对应配置时才处理
@@ -343,11 +345,39 @@ def identify_business_intervals(z_data, target_types=None):
                 if z_data[j].position == boundary and z_data[j].layer_name == p.layer_name:
                     # 统一返回 [浅点, 深点] 的顺序
                     if direction == 1:
-                        intervals.append([p, z_data[j]])
+                        segment = [p, z_data[j]]
+                        down_intervals.append(segment)
                     else:
-                        intervals.append([z_data[j], p])
+                        segment = [z_data[j], p]
+                        up_intervals.append(segment)
+                    intervals.append(segment)
                     break # 找到最近的一个边界后立即跳出当前点的搜寻
-                    
+    
+    # 补齐“向下区间”与“反弯点向上区间”之间跨层缺失区间
+    # 典型场景：开挖较深时，反弯点在更深土层，导致中间层段遗漏
+    if "Inflection" in target_types and down_intervals and up_intervals:
+        bridge_start = max((seg[1] for seg in down_intervals), key=lambda p: p.z)
+        bridge_end = min((seg[0] for seg in up_intervals), key=lambda p: p.z)
+        
+        if bridge_start.z < bridge_end.z - 1e-6:
+            start_idx = z_data.index(bridge_start)
+            end_idx = z_data.index(bridge_end)
+            
+            prev = bridge_start
+            for k in range(start_idx + 1, end_idx + 1):
+                curr = z_data[k]
+                
+                # 同深度接口点（上一层底=下一层顶）只更新锚点，不形成区间
+                if curr.z <= prev.z + 1e-6:
+                    prev = curr
+                    continue
+                
+                intervals.append([prev, curr])
+                prev = curr
+    
+    # 统一按深度从浅到深排序，便于后续计算与调试
+    intervals.sort(key=lambda seg: (seg[0].z, seg[1].z))
+    
     return intervals
 
 def compute_soil_pressure(z_data):
