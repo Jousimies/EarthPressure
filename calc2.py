@@ -300,11 +300,10 @@ def find_insert_index_in_layer(z_axis_data, layer_info, target_depth, tolerance=
 
         if abs(point.z - target_depth) <= tolerance:
             if point.position == "TOP":
-                has_same_depth_before = any(
-                    abs(z_data_point.z - target_depth) <= tolerance
-                    for z_data_point in z_axis_data[:idx]
+                has_previous_point_at_same_depth = (
+                    idx > 0 and abs(z_axis_data[idx - 1].z - target_depth) <= tolerance
                 )
-                return idx if has_same_depth_before else idx + 1
+                return idx if has_previous_point_at_same_depth else idx + 1
             if point.position == "BOTTOM":
                 return idx
             return idx + 1
