@@ -491,8 +491,13 @@ def build_continuous_segments(z_data, start_idx, end_idx):
         or end_idx is None
         or start_idx < 0
         or end_idx >= len(z_data)
-        or start_idx >= end_idx
     ):
+        return []
+
+    if start_idx > end_idx:
+        start_idx, end_idx = end_idx, start_idx
+
+    if start_idx == end_idx:
         return []
 
     return [
@@ -503,23 +508,16 @@ def build_continuous_segments(z_data, start_idx, end_idx):
 def compute_soil_pressure(z_data):
     report = {"active": [], "passive": []}
 
-    excavation_points = [point for point in z_data if point.point_type == "Excavation"]
-    excavation_z = min((point.z for point in excavation_points), default=None)
-    if excavation_z is None:
+    critical_idx = find_boundary_index(z_data, "Critical", "last")
+    inflection_idx = find_boundary_index(z_data, "Inflection", "first")
+    excavation_idx = find_boundary_index(z_data, "Excavation", "first")
+
+    if critical_idx is None or inflection_idx is None or excavation_idx is None:
         return report
 
     # --- 主动土压力计算 ---
-    # 范围：从最浅临界点向下到开挖面，跨越中间所有土层
-    critical_indices = [
-        idx for idx, point in enumerate(z_data)
-        if point.point_type == "Critical"
-        and point.z <= excavation_z + DEPTH_TOLERANCE
-    ]
-    active_start_idx = None
-    if critical_indices:
-        active_start_idx = min(critical_indices, key=lambda idx: z_data[idx].z)
-    active_end_idx = find_boundary_index(z_data, "Excavation", "first", excavation_z)
-    active_segments = build_continuous_segments(z_data, active_start_idx, active_end_idx)
+    # 范围：从临界点到反弯点之间的土层
+    active_segments = build_continuous_segments(z_data, critical_idx, inflection_idx)
     for seg in active_segments:
         f, z_c_rel = calculate_force_and_centroid(seg[0], seg[1], "pa")
         z_c = seg[1].z - z_c_rel
@@ -527,10 +525,8 @@ def compute_soil_pressure(z_data):
             report["active"].append({"range": f"{seg[0].z}-{seg[1].z}", "f": f, "z_c": z_c})
 
     # --- 被动土压力计算 ---
-    # 范围：从反弯点向上到开挖面，跨越中间所有土层
-    passive_start_idx = find_boundary_index(z_data, "Excavation", "last", excavation_z)
-    passive_end_idx = find_boundary_index(z_data, "Inflection", "first")
-    passive_segments = build_continuous_segments(z_data, passive_start_idx, passive_end_idx)
+    # 范围：从开挖点到临界点之间的土层
+    passive_segments = build_continuous_segments(z_data, excavation_idx, critical_idx)
     for seg in passive_segments:
         f, z_c_rel = calculate_force_and_centroid(seg[0], seg[1], "pp")
         z_c = seg[1].z - z_c_rel
