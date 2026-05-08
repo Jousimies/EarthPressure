@@ -235,7 +235,7 @@ def fill_inflection_point_data(inflection_point, excavation_depth, z_axis_data):
 
 def find_layer_at_depth(z_axis_data, target_depth, tolerance=DEPTH_TOLERANCE):
     """
-    在 z_axis_data 中根据深度定位 nominal_z 所在的土层。
+    在 z_axis_data 中根据深度定位 target_depth 所在的土层。
     共享界面深度归属到下伏土层，但插入位置应落在上一层 BOTTOM 与下一层 TOP 之间。
     """
     layer_bounds = {}
@@ -505,13 +505,14 @@ def compute_soil_pressure(z_data):
 
     excavation_points = [point for point in z_data if point.point_type == "Excavation"]
     excavation_z = min((point.z for point in excavation_points), default=None)
+    if excavation_z is None:
+        return report
 
     # --- 主动土压力计算 ---
     # 范围：从最浅临界点向下到开挖面，跨越中间所有土层
     critical_indices = [
         idx for idx, point in enumerate(z_data)
         if point.point_type == "Critical"
-        and excavation_z is not None
         and point.z <= excavation_z + DEPTH_TOLERANCE
     ]
     active_start_idx = None
