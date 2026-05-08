@@ -495,6 +495,7 @@ def build_continuous_segments(z_data, start_idx, end_idx):
         return []
 
     if start_idx > end_idx:
+        # 业务边界可能按“开挖点到临界点”这类深度逆序传入，这里统一转成浅->深连续区间。
         start_idx, end_idx = end_idx, start_idx
 
     if start_idx == end_idx:
