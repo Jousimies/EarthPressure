@@ -1,5 +1,7 @@
 import math
 
+DEPTH_TOLERANCE = 1e-6
+
 class AnalysisPoint:
     """
     分析点类：整合高度Z、土层属性对象与计算结果。
@@ -231,7 +233,7 @@ def fill_inflection_point_data(inflection_point, excavation_depth, z_axis_data):
     
     return inflection_point
 
-def find_layer_at_depth(z_axis_data, target_depth, tolerance=1e-6):
+def find_layer_at_depth(z_axis_data, target_depth, tolerance=DEPTH_TOLERANCE):
     """
     在 z_data 中根据深度定位 nominal_z 所在的土层。
     共享界面深度归属到下伏土层，但插入位置应落在上一层 BOTTOM 与下一层 TOP 之间。
@@ -282,7 +284,7 @@ def find_layer_at_depth(z_axis_data, target_depth, tolerance=1e-6):
 
     return None
 
-def find_insert_index_in_layer(z_axis_data, layer_info, target_depth, tolerance=1e-6):
+def find_insert_index_in_layer(z_axis_data, layer_info, target_depth, tolerance=DEPTH_TOLERANCE):
     """
     计算反弯点在目标土层中的插入位置，确保落在该层 TOP 与 BOTTOM 之间。
     """
@@ -465,7 +467,7 @@ def identify_business_intervals(z_data, target_types=None):
     
     return intervals
 
-def find_boundary_index(z_data, point_type, selector="first", target_z=None, tolerance=1e-6):
+def find_boundary_index(z_data, point_type, selector="first", target_z=None, tolerance=DEPTH_TOLERANCE):
     matches = []
 
     for idx, point in enumerate(z_data):
@@ -496,7 +498,7 @@ def compute_soil_pressure(z_data):
     report = {"active": [], "passive": []}
 
     excavation_points = [point for point in z_data if point.point_type == "Excavation"]
-    excavation_z = excavation_points[0].z if excavation_points else None
+    excavation_z = min((point.z for point in excavation_points), default=None)
 
     # --- 主动土压力计算 ---
     # 范围：从最浅临界点向下到开挖面，跨越中间所有土层
@@ -504,7 +506,7 @@ def compute_soil_pressure(z_data):
         idx for idx, point in enumerate(z_data)
         if point.point_type == "Critical"
         and excavation_z is not None
-        and point.z <= excavation_z + 1e-6
+        and point.z <= excavation_z + DEPTH_TOLERANCE
     ]
     active_start_idx = critical_indices[0] if critical_indices else None
     active_end_idx = find_boundary_index(z_data, "Excavation", "first", excavation_z)
