@@ -465,12 +465,50 @@ def identify_business_intervals(z_data, target_types=None):
     
     return intervals
 
+def find_boundary_index(z_data, point_type, selector="first", target_z=None, tolerance=1e-6):
+    matches = []
+
+    for idx, point in enumerate(z_data):
+        if point.point_type != point_type:
+            continue
+        if target_z is not None and abs(point.z - target_z) > tolerance:
+            continue
+        matches.append((idx, point))
+
+    if not matches:
+        return None
+
+    if selector == "last":
+        return matches[-1][0]
+
+    return matches[0][0]
+
+def build_continuous_segments(z_data, start_idx, end_idx):
+    if start_idx is None or end_idx is None or start_idx >= end_idx:
+        return []
+
+    return [
+        [z_data[idx], z_data[idx + 1]]
+        for idx in range(start_idx, end_idx)
+    ]
+
 def compute_soil_pressure(z_data):
     report = {"active": [], "passive": []}
 
+    excavation_points = [point for point in z_data if point.point_type == "Excavation"]
+    excavation_z = excavation_points[0].z if excavation_points else None
+
     # --- 主动土压力计算 ---
-    # 范围：Critical (向下) 和 Inflection (向上)
-    active_segments = identify_business_intervals(z_data, ["Critical", "Inflection"])
+    # 范围：从最浅临界点向下到开挖面，跨越中间所有土层
+    critical_indices = [
+        idx for idx, point in enumerate(z_data)
+        if point.point_type == "Critical"
+        and excavation_z is not None
+        and point.z <= excavation_z + 1e-6
+    ]
+    active_start_idx = critical_indices[0] if critical_indices else None
+    active_end_idx = find_boundary_index(z_data, "Excavation", "first", excavation_z)
+    active_segments = build_continuous_segments(z_data, active_start_idx, active_end_idx)
     for seg in active_segments:
         f, z_c_rel = calculate_force_and_centroid(seg[0], seg[1], "pa")
         z_c = seg[1].z - z_c_rel
@@ -478,9 +516,10 @@ def compute_soil_pressure(z_data):
             report["active"].append({"range": f"{seg[0].z}-{seg[1].z}", "f": f, "z_c": z_c})
 
     # --- 被动土压力计算 ---
-    # 范围：Excavation (向下) 和 Inflection (向上)
-    # 注意：根据你的要求，被动压力计算范围由这两个标记确定
-    passive_segments = identify_business_intervals(z_data, ["Excavation", "Inflection"])
+    # 范围：从反弯点向上到开挖面，跨越中间所有土层
+    passive_start_idx = find_boundary_index(z_data, "Excavation", "last", excavation_z)
+    passive_end_idx = find_boundary_index(z_data, "Inflection", "first")
+    passive_segments = build_continuous_segments(z_data, passive_start_idx, passive_end_idx)
     for seg in passive_segments:
         f, z_c_rel = calculate_force_and_centroid(seg[0], seg[1], "pp")
         z_c = seg[1].z - z_c_rel
