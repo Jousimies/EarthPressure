@@ -173,6 +173,23 @@ def get_layer_top_point(z_axis_data, layer_index):
     return None
 
 
+def clone_as_boundary_point(source_point, point_type):
+    """
+    基于现有分析点克隆独立边界点，避免手工逐字段拷贝。
+    """
+    point = AnalysisPoint(source_point.z, source_point.position, source_point.layer_index, source_point.layer)
+    point.layer_name = source_point.layer_name
+    point.sigma_v = source_point.sigma_v
+    point.pa = source_point.pa
+    point.pp = source_point.pp
+    point.p_net = source_point.p_net
+    point.cum_force = source_point.cum_force
+    point.cum_moment = source_point.cum_moment
+    point.is_active_zone = source_point.is_active_zone
+    point.point_type = point_type
+    return point
+
+
 def build_excavation_point(z_axis_data, excavation_depth):
     """
     独立构建开挖面边界点，不把该点写回 z_axis_data。
@@ -182,19 +199,7 @@ def build_excavation_point(z_axis_data, excavation_depth):
         None,
     )
     if exact_point is not None:
-        excavation_point = AnalysisPoint(
-            excavation_depth,
-            exact_point.position,
-            exact_point.layer_index,
-            exact_point.layer,
-        )
-        excavation_point.layer_name = exact_point.layer_name
-        excavation_point.sigma_v = exact_point.sigma_v
-        excavation_point.pa = exact_point.pa
-        excavation_point.pp = exact_point.pp
-        excavation_point.p_net = exact_point.p_net
-        excavation_point.point_type = "Excavation"
-        return excavation_point
+        return clone_as_boundary_point(exact_point, "Excavation")
 
     layer_info = find_layer_at_depth(z_axis_data, excavation_depth)
     if layer_info is None:
