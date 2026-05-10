@@ -175,6 +175,7 @@ def get_layer_top_point(z_axis_data, layer_index):
 
 
 def get_layer_bottom_point(z_axis_data, layer_index):
+    """返回指定土层的层底分析点；若不存在则返回 None。"""
     for point in z_axis_data:
         if point.layer_index == layer_index and point.position == "BOTTOM":
             return point
@@ -630,10 +631,16 @@ def build_continuous_segments(z_data, start_point, end_point, boundary_points=No
 
 
 def is_at_or_below_depth(current_depth, boundary_depth, tolerance=DEPTH_TOLERANCE):
+    """判断当前深度是否已到达或超过目标边界深度（含容差）。"""
     return current_depth >= boundary_depth - tolerance
 
 
 def calculate_active_pressure_segments(z_data, boundary_results):
+    """
+    计算主动土压力分段：
+    - 单个临界点：取临界点至反弯点之间的连续土层；
+    - 多个临界点：前置临界点各取至本层层底，最后一个临界点取至反弯点。
+    """
     critical_points = sorted(boundary_results.critical_points, key=lambda p: p.z)
     inflection_point = boundary_results.inflection_point
     if not critical_points or inflection_point is None:
@@ -680,6 +687,7 @@ def calculate_active_pressure_segments(z_data, boundary_results):
 
 
 def calculate_passive_pressure_segments(z_data, boundary_results):
+    """计算被动土压力分段，范围为开挖面至反弯点之间的连续土层。"""
     excavation_point = boundary_results.excavation_point
     inflection_point = boundary_results.inflection_point
     if excavation_point is None or inflection_point is None:
