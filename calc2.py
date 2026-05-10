@@ -54,13 +54,13 @@ class BoundaryResults:
     critical_points: List[AnalysisPoint] = field(default_factory=list)
     inflection_point: Optional[AnalysisPoint] = None
 
-    def primary_critical_point(self):
+    def last_critical_point(self):
         """返回控制计算范围的最后一个临界点；若不存在则返回 None。"""
         if not self.critical_points:
             return None
         return self.critical_points[-1]
 
-    def computed_points(self):
+    def all_boundary_points(self):
         """返回所有独立求得的边界点，供局部合并后的分段计算使用。"""
         points = list(self.critical_points)
         if self.inflection_point is not None:
@@ -266,7 +266,9 @@ def find_critical_points(z_axis_data, pile_top_z, excavation_depth):
 def find_and_insert_critical_depths(z_axis_data, pile_top_z, excavation_depth=None):
     if excavation_depth is None:
         excavation_point = next((p for p in z_axis_data if p.point_type == "Excavation"), None)
-        excavation_depth = excavation_point.z if excavation_point is not None else 0.0
+        if excavation_point is None:
+            raise ValueError("无法从 z_data 中推断 excavation_depth。")
+        excavation_depth = excavation_point.z
     return find_critical_points(z_axis_data, pile_top_z, excavation_depth)
 
 def find_layer_at_depth(z_axis_data, target_depth, tolerance=DEPTH_TOLERANCE):
@@ -573,6 +575,7 @@ def build_continuous_segments(z_data, start_point, end_point, boundary_points=No
         start_idx = merged_points.index(start_point)
         end_idx = merged_points.index(end_point)
     except ValueError:
+        # 兼容旧链与新边界结果混用的场景：任一边界未合并成功时直接返回空区间。
         return []
 
     if start_idx > end_idx:
@@ -605,14 +608,14 @@ def compute_soil_pressure(z_data, boundary_results=None):
     if boundary_results is None:
         boundary_results = build_boundary_results_from_z_data(z_data)
 
-    critical_point = boundary_results.primary_critical_point()
+    critical_point = boundary_results.last_critical_point()
     inflection_point = boundary_results.inflection_point
     excavation_point = boundary_results.excavation_point
 
     if critical_point is None or inflection_point is None or excavation_point is None:
         return report
 
-    boundary_points = boundary_results.computed_points()
+    boundary_points = boundary_results.all_boundary_points()
 
     # --- 主动土压力计算 ---
     # 范围：从临界点到反弯点之间的土层
