@@ -348,7 +348,7 @@ class ResultViewer(tk.Toplevel):
         profile_right = canvas_width - self.PROFILE_RIGHT_MARGIN
         center_x = (profile_left + profile_right) / 2
 
-        self.canvas.create_text(center_x, 18, text="土层压力示意（左被动｜右主动）", font=("微软雅黑", 11, "bold"))
+        self.canvas.create_text(center_x, 18, text="土层压力示意（左被动|右主动）", font=("微软雅黑", 11, "bold"))
         self.canvas.create_text(
             center_x - 120,
             32,
