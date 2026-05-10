@@ -397,7 +397,7 @@ class ResultViewer(tk.Toplevel):
             self.canvas.create_text(
                 profile_left - 14,
                 label_y,
-                text=f"{layer['name']}\n{layer['thickness']:.2f}m ({layer['top_depth']:.1f}-{layer['bottom_depth']:.1f}m)",
+                text=layer["name"],
                 anchor="e",
                 width=150,
                 font=("微软雅黑", 9),
@@ -423,17 +423,8 @@ class ResultViewer(tk.Toplevel):
 
             self.canvas.create_text(
                 profile_left - self.DEPTH_LABEL_LEFT_OFFSET,
-                y1,
-                text=f"{layer['top_depth']:.1f}m",
-                anchor="e",
-                fill="#475569",
-            )
-
-        if layer_layout:
-            self.canvas.create_text(
-                profile_left - self.DEPTH_LABEL_LEFT_OFFSET,
-                layer_layout[-1]["y2"],
-                text=f"{layer_layout[-1]['bottom_depth']:.1f}m",
+                y2,
+                text=f"{layer['bottom_depth']:.1f}m",
                 anchor="e",
                 fill="#475569",
             )
