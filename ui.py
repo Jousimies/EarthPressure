@@ -260,15 +260,13 @@ class ResultViewer(tk.Toplevel):
 
         min_height = self.MIN_LAYER_HEIGHT
         base_height = min_height * layer_count
-        total_thickness = sum(max(layer["thickness"], 0.0) for layer in layers)
+        total_thickness = sum(self._get_safe_thickness(layer) for layer in layers)
         if total_thickness <= 0:
             total_thickness = float(layer_count)
 
         if base_height < usable_height:
             extra_height = usable_height - base_height
-            layer_heights = [
-                min_height + extra_height * (max(layer["thickness"], 0.0) / total_thickness) for layer in layers
-            ]
+            layer_heights = [min_height + extra_height * (self._get_safe_thickness(layer) / total_thickness) for layer in layers]
         else:
             equal_height = usable_height / layer_count
             layer_heights = [equal_height for _ in layers]
@@ -305,6 +303,9 @@ class ResultViewer(tk.Toplevel):
                 return item["y1"] + (item["y2"] - item["y1"]) * ratio
         return bottom_y
 
+    def _get_safe_thickness(self, layer):
+        return max(layer["thickness"], 0.0)
+
     def _layer_pressure_preview(self, points, layer):
         active_pressure_values = []
         passive_pressure_values = []
@@ -315,8 +316,8 @@ class ResultViewer(tk.Toplevel):
                 continue
             active_pressure_values.append(point["pa"])
             passive_pressure_values.append(point["pp"])
-        max_active_pressure = max(active_pressure_values) if active_pressure_values else 0.0
         max_passive_pressure = max(passive_pressure_values) if passive_pressure_values else 0.0
+        max_active_pressure = max(active_pressure_values) if active_pressure_values else 0.0
         return max_passive_pressure, max_active_pressure
 
     def _draw_schematic(self, dataset, stage):
@@ -370,7 +371,7 @@ class ResultViewer(tk.Toplevel):
             self.canvas.create_text(
                 profile_left - 14,
                 label_y,
-                text=f"{layer['name']}\n{layer['thickness']:.2f}m",
+                text=f"{layer['name']}\n{layer['thickness']:.2f}m ({layer['top_depth']:.1f}-{layer['bottom_depth']:.1f}m)",
                 anchor="e",
                 width=150,
                 font=("微软雅黑", 9),
