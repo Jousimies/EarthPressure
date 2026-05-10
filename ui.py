@@ -14,6 +14,10 @@ class ResultViewer(tk.Toplevel):
     MIN_CANVAS_WIDTH = 620
     TOP_MARGIN = 44
     BOTTOM_MARGIN = 32
+    PROFILE_LEFT_MARGIN = 220
+    PROFILE_RIGHT_MARGIN = 40
+    ZONE_LABEL_Y_OFFSET = 14
+    DEPTH_LABEL_LEFT_OFFSET = 166
     MIN_LAYER_HEIGHT = 38
     MIN_THICKNESS_EPSILON = 1e-6
     PRESSURE_LABEL_OFFSET = 10
@@ -340,8 +344,8 @@ class ResultViewer(tk.Toplevel):
         bottom_y = canvas_height - bottom_margin
         layer_layout = self._build_layer_layout(dataset["layers"], top_margin, usable_height)
 
-        profile_left = 220
-        profile_right = canvas_width - 40
+        profile_left = self.PROFILE_LEFT_MARGIN
+        profile_right = canvas_width - self.PROFILE_RIGHT_MARGIN
         center_x = (profile_left + profile_right) / 2
 
         self.canvas.create_text(center_x, 18, text="土层压力示意（左被动｜右主动）", font=("微软雅黑", 11, "bold"))
@@ -363,8 +367,20 @@ class ResultViewer(tk.Toplevel):
         self.canvas.create_line(profile_left, top_margin, profile_left, bottom_y, width=1, fill="#64748B")
         self.canvas.create_line(profile_right, top_margin, profile_right, bottom_y, width=1, fill="#64748B")
         self.canvas.create_line(center_x, top_margin, center_x, bottom_y, width=3, fill="#111827")
-        self.canvas.create_text((profile_left + center_x) / 2, top_margin + 14, text="被动区", fill="#1E3A8A", font=("微软雅黑", 9, "bold"))
-        self.canvas.create_text((center_x + profile_right) / 2, top_margin + 14, text="主动区", fill="#9A3412", font=("微软雅黑", 9, "bold"))
+        self.canvas.create_text(
+            (profile_left + center_x) / 2,
+            top_margin + self.ZONE_LABEL_Y_OFFSET,
+            text="被动区",
+            fill="#1E3A8A",
+            font=("微软雅黑", 9, "bold"),
+        )
+        self.canvas.create_text(
+            (center_x + profile_right) / 2,
+            top_margin + self.ZONE_LABEL_Y_OFFSET,
+            text="主动区",
+            fill="#9A3412",
+            font=("微软雅黑", 9, "bold"),
+        )
 
         points = stage.get("points", [])
         for index, item in enumerate(layer_layout):
@@ -405,11 +421,17 @@ class ResultViewer(tk.Toplevel):
                 font=("微软雅黑", 9),
             )
 
-            self.canvas.create_text(profile_left - 166, y1, text=f"{layer['top_depth']:.1f}m", anchor="e", fill="#475569")
+            self.canvas.create_text(
+                profile_left - self.DEPTH_LABEL_LEFT_OFFSET,
+                y1,
+                text=f"{layer['top_depth']:.1f}m",
+                anchor="e",
+                fill="#475569",
+            )
 
         if layer_layout:
             self.canvas.create_text(
-                profile_left - 166,
+                profile_left - self.DEPTH_LABEL_LEFT_OFFSET,
                 layer_layout[-1]["y2"],
                 text=f"{layer_layout[-1]['bottom_depth']:.1f}m",
                 anchor="e",
