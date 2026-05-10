@@ -150,7 +150,7 @@ def z_based_data_collection(layers, overload, excavation_depth):
 def update_passive_pressures(z_data, excavation_depth):
     for point in z_data:
         # 深度小于开挖面的点，被动压力为 0
-        if point.z < excavation_depth - 1e-4:
+        if point.z < excavation_depth - DEPTH_TOLERANCE:
             point.pp = 0.0
         else:
             # 计算相对于开挖面的相对深度
@@ -427,7 +427,7 @@ def find_inflection_point(z_axis_data, excavation_depth, excavation_point=None):
         p_top = search_points[i]
         p_bot = search_points[i+1]
         
-        if p_top.z < excavation_depth - 1e-4:
+        if p_top.z < excavation_depth - DEPTH_TOLERANCE:
             continue
         if abs(p_top.z - p_bot.z) <= DEPTH_TOLERANCE:
             continue
