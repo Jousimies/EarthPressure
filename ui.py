@@ -63,16 +63,24 @@ class ResultViewer(tk.Toplevel):
         ).pack(fill="x")
         tk.Label(info_frame, textvariable=self.dataset_meta_var, anchor="w").pack(fill="x", pady=(2, 0))
 
-        paned = ttk.PanedWindow(self, orient="horizontal")
-        paned.pack(fill="both", expand=True, padx=12, pady=6)
+        stage_frame = tk.LabelFrame(self, text="工况切换", padx=8, pady=8)
+        stage_frame.pack(fill="x", padx=12, pady=(0, 6))
+        self.stage_button_frame = tk.Frame(stage_frame)
+        self.stage_button_frame.pack(fill="x")
 
-        left_frame = tk.LabelFrame(paned, text="土层数据", padx=8, pady=8)
-        right_frame = tk.Frame(paned)
+        paned = ttk.PanedWindow(self, orient="horizontal")
+        paned.pack(fill="both", expand=True, padx=12, pady=(0, 12))
+
+        left_frame = tk.Frame(paned)
+        right_frame = tk.LabelFrame(paned, text="土层示意图", padx=8, pady=8)
         paned.add(left_frame, weight=1)
         paned.add(right_frame, weight=1)
 
+        layer_data_frame = tk.LabelFrame(left_frame, text="土层数据", padx=8, pady=8)
+        layer_data_frame.pack(fill="both", expand=True)
+
         layer_columns = ("index", "name", "thickness", "gamma", "c", "phi", "mode", "depth")
-        self.layer_tree = ttk.Treeview(left_frame, columns=layer_columns, show="headings", height=16)
+        self.layer_tree = ttk.Treeview(layer_data_frame, columns=layer_columns, show="headings", height=14)
         layer_headings = {
             "index": "序号",
             "name": "名称",
@@ -87,32 +95,19 @@ class ResultViewer(tk.Toplevel):
         for column, title in layer_headings.items():
             self.layer_tree.heading(column, text=title)
             self.layer_tree.column(column, width=widths[column], anchor="center")
-        layer_scroll = ttk.Scrollbar(left_frame, orient="vertical", command=self.layer_tree.yview)
+        layer_scroll = ttk.Scrollbar(layer_data_frame, orient="vertical", command=self.layer_tree.yview)
         self.layer_tree.configure(yscrollcommand=layer_scroll.set)
         self.layer_tree.pack(side="left", fill="both", expand=True)
         layer_scroll.pack(side="right", fill="y")
 
-        stage_frame = tk.LabelFrame(right_frame, text="工况切换", padx=8, pady=8)
-        stage_frame.pack(fill="x", pady=(0, 6))
-        self.stage_button_frame = tk.Frame(stage_frame)
-        self.stage_button_frame.pack(fill="x")
-
-        schematic_frame = tk.LabelFrame(right_frame, text="土层示意图", padx=8, pady=8)
-        schematic_frame.pack(fill="both", expand=True)
-        self.canvas = tk.Canvas(schematic_frame, bg="white", highlightthickness=0)
-        self.canvas.pack(fill="both", expand=True)
-
-        bottom_frame = tk.Frame(self)
-        bottom_frame.pack(fill="both", expand=False, padx=12, pady=(0, 12))
-
-        summary_frame = tk.LabelFrame(bottom_frame, text="当前工况结果", padx=8, pady=8)
-        summary_frame.pack(fill="x", pady=(0, 6))
+        summary_frame = tk.LabelFrame(left_frame, text="当前工况结果", padx=8, pady=8)
+        summary_frame.pack(fill="x", pady=(6, 6))
         tk.Label(summary_frame, textvariable=self.stage_summary_var, justify="left", anchor="w").pack(fill="x")
         tk.Label(summary_frame, textvariable=self.warning_var, fg="#B23A48", justify="left", anchor="w").pack(
             fill="x", pady=(4, 0)
         )
 
-        pressure_paned = ttk.PanedWindow(bottom_frame, orient="horizontal")
+        pressure_paned = ttk.PanedWindow(left_frame, orient="horizontal")
         pressure_paned.pack(fill="both", expand=True)
         active_frame = tk.LabelFrame(pressure_paned, text="主动土压力分段", padx=8, pady=8)
         passive_frame = tk.LabelFrame(pressure_paned, text="被动土压力分段", padx=8, pady=8)
@@ -122,6 +117,9 @@ class ResultViewer(tk.Toplevel):
         pressure_columns = ("range", "force", "centroid")
         self.active_tree = self._build_pressure_tree(active_frame, pressure_columns)
         self.passive_tree = self._build_pressure_tree(passive_frame, pressure_columns)
+
+        self.canvas = tk.Canvas(right_frame, bg="white", highlightthickness=0)
+        self.canvas.pack(fill="both", expand=True)
 
     def _build_pressure_tree(self, parent, columns):
         tree = ttk.Treeview(parent, columns=columns, show="headings", height=8)
