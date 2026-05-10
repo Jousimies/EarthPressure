@@ -824,7 +824,7 @@ def build_default_scenarios():
             "overload": 30,
             "layers": [
                 {"name": "杂填土", "thickness": 0.6, "unit_weight": 18.2, "cohesion": 6.0, "friction_angle": 12.3},
-                {"name": "素填士", "thickness": 0.7, "unit_weight": 18.7, "cohesion": 18.0, "friction_angle": 12.3},
+                {"name": "素填土", "thickness": 0.7, "unit_weight": 18.7, "cohesion": 18.0, "friction_angle": 12.3},
                 {"name": "粉质黏土", "thickness": 3.3, "unit_weight": 19.0, "cohesion": 26.0, "friction_angle": 14.3},
                 {"name": "粉质黏土", "thickness": 4.4, "unit_weight": 19.8, "cohesion": 43.2, "friction_angle": 21.0},
                 {"name": "粉质黏土混卵砾石", "thickness": 5.1, "unit_weight": 20.5, "cohesion": 28.5, "friction_angle": 23.5},
@@ -837,7 +837,7 @@ def build_default_scenarios():
             "overload": 20,
             "layers": [
                 {"name": "杂填土", "thickness": 0.5, "unit_weight": 18.2, "cohesion": 6.0, "friction_angle": 12.3},
-                {"name": "素填士", "thickness": 0.5, "unit_weight": 18.7, "cohesion": 18.0, "friction_angle": 12.3},
+                {"name": "素填土", "thickness": 0.5, "unit_weight": 18.7, "cohesion": 18.0, "friction_angle": 12.3},
                 {"name": "粉质黏土", "thickness": 4.0, "unit_weight": 19.0, "cohesion": 26.0, "friction_angle": 14.3},
                 {"name": "粉质黏土", "thickness": 5.2, "unit_weight": 19.8, "cohesion": 43.2, "friction_angle": 21.0},
                 {"name": "粉质黏土混卵砾石", "thickness": 4.3, "unit_weight": 20.5, "cohesion": 28.5, "friction_angle": 23.5},
@@ -850,7 +850,7 @@ def build_default_scenarios():
             "overload": 20,
             "layers": [
                 {"name": "杂填土", "thickness": 0.4, "unit_weight": 18.2, "cohesion": 6.0, "friction_angle": 12.3},
-                {"name": "素填士", "thickness": 0.6, "unit_weight": 18.7, "cohesion": 18.0, "friction_angle": 12.3},
+                {"name": "素填土", "thickness": 0.6, "unit_weight": 18.7, "cohesion": 18.0, "friction_angle": 12.3},
                 {"name": "粉质黏土", "thickness": 5.0, "unit_weight": 19.0, "cohesion": 26.0, "friction_angle": 14.3},
                 {"name": "粉质黏土", "thickness": 4.2, "unit_weight": 19.8, "cohesion": 43.2, "friction_angle": 21.0},
                 {"name": "粉质黏土混卵砾石", "thickness": 4.0, "unit_weight": 20.5, "cohesion": 28.5, "friction_angle": 23.5},
