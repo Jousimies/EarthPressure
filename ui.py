@@ -11,6 +11,11 @@ from calc2 import (
 
 
 class ResultViewer(tk.Toplevel):
+    MIN_LAYER_HEIGHT = 38
+    MIN_THICKNESS_EPSILON = 1e-6
+    PRESSURE_LABEL_OFFSET = 10
+    PASSIVE_PRESSURE_COLOR = "#1D4ED8"
+    ACTIVE_PRESSURE_COLOR = "#D62828"
     LAYER_COLORS = [
         "#F4D06F",
         "#FF9B85",
@@ -253,7 +258,7 @@ class ResultViewer(tk.Toplevel):
         if layer_count == 0:
             return []
 
-        min_height = 38
+        min_height = self.MIN_LAYER_HEIGHT
         base_height = min_height * layer_count
         total_thickness = sum(max(layer["thickness"], 0.0) for layer in layers)
         if total_thickness <= 0:
@@ -295,24 +300,24 @@ class ResultViewer(tk.Toplevel):
 
         for item in layer_layout:
             if item["top_depth"] <= depth <= item["bottom_depth"]:
-                thickness = max(item["bottom_depth"] - item["top_depth"], 1e-6)
+                thickness = max(item["bottom_depth"] - item["top_depth"], self.MIN_THICKNESS_EPSILON)
                 ratio = (depth - item["top_depth"]) / thickness
                 return item["y1"] + (item["y2"] - item["y1"]) * ratio
         return bottom_y
 
     def _layer_pressure_preview(self, points, layer):
-        pa_values = []
-        pp_values = []
+        active_pressure_values = []
+        passive_pressure_values = []
         for point in points:
             if point["layer_name"] != layer["name"]:
                 continue
             if not (layer["top_depth"] <= point["z"] <= layer["bottom_depth"]):
                 continue
-            pa_values.append(point["pa"])
-            pp_values.append(point["pp"])
-        pa = max(pa_values) if pa_values else 0.0
-        pp = max(pp_values) if pp_values else 0.0
-        return pa, pp
+            active_pressure_values.append(point["pa"])
+            passive_pressure_values.append(point["pp"])
+        max_active_pressure = max(active_pressure_values) if active_pressure_values else 0.0
+        max_passive_pressure = max(passive_pressure_values) if passive_pressure_values else 0.0
+        return max_passive_pressure, max_active_pressure
 
     def _draw_schematic(self, dataset, stage):
         self.canvas.delete("all")
@@ -331,8 +336,20 @@ class ResultViewer(tk.Toplevel):
         center_x = (profile_left + profile_right) / 2
 
         self.canvas.create_text(center_x, 18, text="土层压力示意（左被动 / 右主动）", font=("微软雅黑", 11, "bold"))
-        self.canvas.create_text(center_x - 120, 32, text="被动土压力 Pp", fill="#1D4ED8", font=("微软雅黑", 9, "bold"))
-        self.canvas.create_text(center_x + 120, 32, text="主动土压力 Pa", fill="#D62828", font=("微软雅黑", 9, "bold"))
+        self.canvas.create_text(
+            center_x - 120,
+            32,
+            text="被动土压力 Pp",
+            fill=self.PASSIVE_PRESSURE_COLOR,
+            font=("微软雅黑", 9, "bold"),
+        )
+        self.canvas.create_text(
+            center_x + 120,
+            32,
+            text="主动土压力 Pa",
+            fill=self.ACTIVE_PRESSURE_COLOR,
+            font=("微软雅黑", 9, "bold"),
+        )
 
         self.canvas.create_line(profile_left, top_margin, profile_left, bottom_y, width=1, fill="#64748B")
         self.canvas.create_line(profile_right, top_margin, profile_right, bottom_y, width=1, fill="#64748B")
@@ -360,8 +377,22 @@ class ResultViewer(tk.Toplevel):
             )
 
             pp, pa = self._layer_pressure_preview(points, layer)
-            self.canvas.create_text(center_x - 10, label_y, text=f"Pp≈{pp:.1f}", anchor="e", fill="#1D4ED8", font=("微软雅黑", 9))
-            self.canvas.create_text(center_x + 10, label_y, text=f"Pa≈{pa:.1f}", anchor="w", fill="#D62828", font=("微软雅黑", 9))
+            self.canvas.create_text(
+                center_x - self.PRESSURE_LABEL_OFFSET,
+                label_y,
+                text=f"Pp≈{pp:.1f}",
+                anchor="e",
+                fill=self.PASSIVE_PRESSURE_COLOR,
+                font=("微软雅黑", 9),
+            )
+            self.canvas.create_text(
+                center_x + self.PRESSURE_LABEL_OFFSET,
+                label_y,
+                text=f"Pa≈{pa:.1f}",
+                anchor="w",
+                fill=self.ACTIVE_PRESSURE_COLOR,
+                font=("微软雅黑", 9),
+            )
 
             self.canvas.create_text(profile_left - 166, y1, text=f"{layer['top_depth']:.1f}m", anchor="e", fill="#475569")
 
