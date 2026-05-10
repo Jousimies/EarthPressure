@@ -336,7 +336,7 @@ class ResultViewer(tk.Toplevel):
         profile_right = canvas_width - 40
         center_x = (profile_left + profile_right) / 2
 
-        self.canvas.create_text(center_x, 18, text="土层压力示意（左被动 / 右主动）", font=("微软雅黑", 11, "bold"))
+        self.canvas.create_text(center_x, 18, text="土层压力示意（左被动｜右主动）", font=("微软雅黑", 11, "bold"))
         self.canvas.create_text(
             center_x - 120,
             32,
@@ -355,6 +355,8 @@ class ResultViewer(tk.Toplevel):
         self.canvas.create_line(profile_left, top_margin, profile_left, bottom_y, width=1, fill="#64748B")
         self.canvas.create_line(profile_right, top_margin, profile_right, bottom_y, width=1, fill="#64748B")
         self.canvas.create_line(center_x, top_margin, center_x, bottom_y, width=3, fill="#111827")
+        self.canvas.create_text((profile_left + center_x) / 2, top_margin + 14, text="被动区", fill="#1E3A8A", font=("微软雅黑", 9, "bold"))
+        self.canvas.create_text((center_x + profile_right) / 2, top_margin + 14, text="主动区", fill="#9A3412", font=("微软雅黑", 9, "bold"))
 
         points = stage.get("points", [])
         for index, item in enumerate(layer_layout):
@@ -377,11 +379,11 @@ class ResultViewer(tk.Toplevel):
                 font=("微软雅黑", 9),
             )
 
-            pp, pa = self._layer_pressure_preview(points, layer)
+            max_passive_pressure, max_active_pressure = self._layer_pressure_preview(points, layer)
             self.canvas.create_text(
                 center_x - self.PRESSURE_LABEL_OFFSET,
                 label_y,
-                text=f"Pp≈{pp:.1f}",
+                text=f"Pp≈{max_passive_pressure:.1f}",
                 anchor="e",
                 fill=self.PASSIVE_PRESSURE_COLOR,
                 font=("微软雅黑", 9),
@@ -389,7 +391,7 @@ class ResultViewer(tk.Toplevel):
             self.canvas.create_text(
                 center_x + self.PRESSURE_LABEL_OFFSET,
                 label_y,
-                text=f"Pa≈{pa:.1f}",
+                text=f"Pa≈{max_active_pressure:.1f}",
                 anchor="w",
                 fill=self.ACTIVE_PRESSURE_COLOR,
                 font=("微软雅黑", 9),
