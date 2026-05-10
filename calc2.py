@@ -206,7 +206,7 @@ def populate_boundary_point_data(point, excavation_depth, z_axis_data, force_pa_
     if force_pa_zero:
         point.pa = 0.0
 
-    if point.z < excavation_depth - 1e-4:
+    if point.z < excavation_depth - DEPTH_TOLERANCE:
         point.pp = 0.0
     else:
         dz = max(0, point.z - excavation_depth)
@@ -264,6 +264,7 @@ def find_critical_points(z_axis_data, pile_top_z, excavation_depth):
 
 
 def find_and_insert_critical_depths(z_axis_data, pile_top_z, excavation_depth=None):
+    """兼容旧接口；仅返回临界点列表，不再把临界点写回 `z_axis_data`。"""
     if excavation_depth is None:
         excavation_point = next((p for p in z_axis_data if p.point_type == "Excavation"), None)
         if excavation_point is None:
@@ -430,7 +431,7 @@ def find_inflection_point(z_axis_data, excavation_depth):
 
 
 def find_and_insert_inflection_point(z_axis_data, excavation_depth):
-    """兼容旧接口，内部直接委托给 `find_inflection_point`。"""
+    """兼容旧接口；仅返回反弯点，不再把反弯点写回 `z_axis_data`。"""
     return find_inflection_point(z_axis_data, excavation_depth)
 
 def calculate_force_and_centroid(p1, p2, force_type="pa"):
