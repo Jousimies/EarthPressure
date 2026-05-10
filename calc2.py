@@ -182,14 +182,14 @@ def get_layer_top_point(z_axis_data, layer_index):
     return None
 
 
-def populate_boundary_point_data(point, excavation_depth, z_axis_data, force_pa_zero=False, force_p_net_zero=False):
+def populate_boundary_point_data(point, excavation_depth, z_axis_data, set_pa_to_zero=False, set_p_net_to_zero=False):
     """
     为独立边界点补齐应力与压力数据。
     :param point: 需要补算的边界点对象
     :param excavation_depth: 当前开挖深度
     :param z_axis_data: 原始分析链，仅用于读取层顶基准数据
-    :param force_pa_zero: 是否强制将主动土压力设为 0（用于临界点）
-    :param force_p_net_zero: 是否强制将净压力设为 0（用于反弯点）
+    :param set_pa_to_zero: 是否强制将主动土压力设为 0（用于临界点）
+    :param set_p_net_to_zero: 是否强制将净压力设为 0（用于反弯点）
     :return: 补算完成后的边界点对象
     """
     layer_top_point = get_layer_top_point(z_axis_data, point.layer_index)
@@ -203,7 +203,7 @@ def populate_boundary_point_data(point, excavation_depth, z_axis_data, force_pa_
     ka = layer.active_coefficient()
     c_a = 2 * layer.cohesion * math.sqrt(ka)
     point.pa = round(point.sigma_v * ka - c_a, 2)
-    if force_pa_zero:
+    if set_pa_to_zero:
         point.pa = 0.0
 
     if point.z < excavation_depth - DEPTH_TOLERANCE:
@@ -215,7 +215,7 @@ def populate_boundary_point_data(point, excavation_depth, z_axis_data, force_pa_
         point.pp = round(layer.unit_weight * dz * kp + c_p, 2)
 
     point.p_net = round(point.pa - point.pp, 2)
-    if force_p_net_zero:
+    if set_p_net_to_zero:
         point.p_net = 0.0
 
     return point
@@ -254,7 +254,7 @@ def find_critical_points(z_axis_data, pile_top_z, excavation_depth):
                     crit_point,
                     excavation_depth,
                     z_axis_data,
-                    force_pa_zero=True,
+                    set_pa_to_zero=True,
                 )
                 critical_points.append(crit_point)
 
@@ -353,14 +353,14 @@ def find_insert_index_in_layer(z_axis_data, layer_info, target_depth, tolerance=
 
     return insert_index
 
-def create_interpolated_boundary_point(p_top, p_bot, target_z, point_type, force_p_net_zero=False):
+def create_interpolated_boundary_point(p_top, p_bot, target_z, point_type, set_p_net_to_zero=False):
     """
     在线性变化区间内按深度插值生成边界点。
     :param p_top: 区间浅端点
     :param p_bot: 区间深端点
     :param target_z: 目标深度
     :param point_type: 边界点类型
-    :param force_p_net_zero: 是否强制将净压力设为 0
+    :param set_p_net_to_zero: 是否强制将净压力设为 0
     :return: 插值后的边界点对象
     """
     if abs(p_bot.z - p_top.z) <= DEPTH_TOLERANCE:
@@ -375,7 +375,7 @@ def create_interpolated_boundary_point(p_top, p_bot, target_z, point_type, force
     point.pp = round(p_top.pp + (p_bot.pp - p_top.pp) * ratio, 2)
     point.p_net = round(p_top.p_net + (p_bot.p_net - p_top.p_net) * ratio, 2)
 
-    if force_p_net_zero:
+    if set_p_net_to_zero:
         point.p_net = 0.0
 
     return point
@@ -407,7 +407,7 @@ def find_inflection_point(z_axis_data, excavation_depth):
                 p_bot,
                 target_z,
                 "Inflection",
-                force_p_net_zero=True,
+                set_p_net_to_zero=True,
             )
 
     # 2. 如果没有找到零点（坑底土层太强），执行退路逻辑
@@ -422,7 +422,7 @@ def find_inflection_point(z_axis_data, excavation_depth):
             inflection_point,
             excavation_depth,
             z_axis_data,
-            force_p_net_zero=True,
+            set_p_net_to_zero=True,
         )
         print(f"提示：未发现自然土压力零点，已取 1.2H ({nominal_z}m) 作为名义零点。")
         return inflection_point
