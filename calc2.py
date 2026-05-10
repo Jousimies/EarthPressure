@@ -1,9 +1,14 @@
 import math
 import copy
 from dataclasses import dataclass, field
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 
 DEPTH_TOLERANCE = 1e-6
+DEFAULT_PILE_TOP_Z = 1.5
+DEFAULT_CONSTRUCTION_STAGES = [
+    {"label": "工况 1", "excavation": 8.5, "strut": 2.0},
+    {"label": "工况 2", "excavation": 13.0, "strut": 8.0},
+]
 
 class AnalysisPoint:
     """
@@ -412,7 +417,7 @@ def create_interpolated_boundary_point(p_top, p_bot, target_z, point_type, set_p
     return point
 
 
-def find_inflection_point(z_axis_data, excavation_depth, excavation_point=None):
+def find_inflection_point(z_axis_data, excavation_depth, excavation_point=None, log_fallback=True):
     """
     寻找反弯点：优先寻找 Pa - Pp = 0 的解析点；
      若无法确定（被动始终大于主动），则取 1.2 倍开挖深度处作为名义零点。
@@ -457,13 +462,15 @@ def find_inflection_point(z_axis_data, excavation_depth, excavation_point=None):
         inflection_point = AnalysisPoint(nominal_z, "MID", layer_info["top"].layer_index, layer)
         inflection_point.point_type = "Inflection"
         inflection_point.layer_name = f"{layer.name}"
+        inflection_point.is_nominal = True
         populate_boundary_point_data(
             inflection_point,
             excavation_depth,
             z_axis_data,
             set_p_net_to_zero=True,
         )
-        print(f"提示：未发现自然土压力零点，已取 1.2H ({nominal_z}m) 作为名义零点。")
+        if log_fallback:
+            print(f"提示：未发现自然土压力零点，已取 1.2H ({nominal_z}m) 作为名义零点。")
         return inflection_point
 
     return None
@@ -809,73 +816,242 @@ def calculate_multi_strut_force(pressure_report, z_inflection, current_strut_pos
     current_force = -sum_moment / current_arm
     return abs(round(current_force, 2))
 
-if __name__ == "__main__":
-    
-    depth_pile = 1.5 # 桩入土深度或特定参数
-    # 定义施工工况：(当前开挖深度, 当前新增的支撑位置)
-    # 第一步：开挖至 3.0m，加第一道支撑 at 2.0m
-    # 第二步：开挖至 8.5m，加第二道支撑 at 7.0m
-    
-    construction_stages = [
-        {"excavation": 8.5, "strut": 2.0},
-        {"excavation": 13, "strut": 8.0}
-    ]
 
-    # 定义不同的计算工况/截面
-    scenarios = [
+def build_default_scenarios():
+    return [
         {
             "name": "第一道截面",
             "overload": 30,
             "layers": [
-                SoilLayer("杂填土", 0.6, 18.2, 6.0, 12.3),
-                SoilLayer("素填士", 0.7, 18.7, 18.0, 12.3),
-                SoilLayer("粉质黏土", 3.3, 19.0, 26.0, 14.3),
-                SoilLayer("粉质黏土", 4.4, 19.8, 43.2, 21.0),
-                SoilLayer("粉质黏土混卵砾石", 5.1, 20.5, 28.5, 23.5),
-                SoilLayer("强风化粉砂岩", 7.4, 21.0, 28.5, 22.5),
-                SoilLayer("中风化粉砂岩粉砂岩", 25.6, 22.2, 55.1, 30.7)
-            ]
+                {"name": "杂填土", "thickness": 0.6, "unit_weight": 18.2, "cohesion": 6.0, "friction_angle": 12.3},
+                {"name": "素填土", "thickness": 0.7, "unit_weight": 18.7, "cohesion": 18.0, "friction_angle": 12.3},
+                {"name": "粉质黏土", "thickness": 3.3, "unit_weight": 19.0, "cohesion": 26.0, "friction_angle": 14.3},
+                {"name": "粉质黏土", "thickness": 4.4, "unit_weight": 19.8, "cohesion": 43.2, "friction_angle": 21.0},
+                {"name": "粉质黏土混卵砾石", "thickness": 5.1, "unit_weight": 20.5, "cohesion": 28.5, "friction_angle": 23.5},
+                {"name": "强风化粉砂岩", "thickness": 7.4, "unit_weight": 21.0, "cohesion": 28.5, "friction_angle": 22.5},
+                {"name": "中风化粉砂岩粉砂岩", "thickness": 25.6, "unit_weight": 22.2, "cohesion": 55.1, "friction_angle": 30.7},
+            ],
         },
         {
             "name": "CD 截面",
             "overload": 20,
             "layers": [
-                SoilLayer("杂填土", 0.5, 18.2, 6.0, 12.3),
-                SoilLayer("素填士", 0.5, 18.7, 18.0, 12.3),
-                SoilLayer("粉质黏土", 4, 19.0, 26.0, 14.3),
-                SoilLayer("粉质黏土", 5.2, 19.8, 43.2, 21.0),
-                SoilLayer("粉质黏土混卵砾石", 4.3, 20.5, 28.5, 23.5),
-                SoilLayer("强风化粉砂岩", 8, 21.0, 28.5, 22.5),
-                SoilLayer("中风化粉砂岩粉砂岩", 23, 22.2, 55.1, 30.7)
-            ]
+                {"name": "杂填土", "thickness": 0.5, "unit_weight": 18.2, "cohesion": 6.0, "friction_angle": 12.3},
+                {"name": "素填土", "thickness": 0.5, "unit_weight": 18.7, "cohesion": 18.0, "friction_angle": 12.3},
+                {"name": "粉质黏土", "thickness": 4.0, "unit_weight": 19.0, "cohesion": 26.0, "friction_angle": 14.3},
+                {"name": "粉质黏土", "thickness": 5.2, "unit_weight": 19.8, "cohesion": 43.2, "friction_angle": 21.0},
+                {"name": "粉质黏土混卵砾石", "thickness": 4.3, "unit_weight": 20.5, "cohesion": 28.5, "friction_angle": 23.5},
+                {"name": "强风化粉砂岩", "thickness": 8.0, "unit_weight": 21.0, "cohesion": 28.5, "friction_angle": 22.5},
+                {"name": "中风化粉砂岩粉砂岩", "thickness": 23.0, "unit_weight": 22.2, "cohesion": 55.1, "friction_angle": 30.7},
+            ],
         },
         {
             "name": "DA 截面",
             "overload": 20,
             "layers": [
-                SoilLayer("杂填土", 0.4, 18.2, 6.0, 12.3),
-                SoilLayer("素填士", 0.6, 18.7, 18.0, 12.3),
-                SoilLayer("粉质黏土", 5, 19.0, 26.0, 14.3),
-                SoilLayer("粉质黏土", 4.2, 19.8, 43.2, 21.0),
-                SoilLayer("粉质黏土混卵砾石", 4, 20.5, 28.5, 23.5),
-                SoilLayer("强风化粉砂岩", 6.8, 21.0, 28.5, 22.5),
-                SoilLayer("中风化粉砂岩粉砂岩", 27, 22.2, 55.1, 30.7)
-            ]
-        }
+                {"name": "杂填土", "thickness": 0.4, "unit_weight": 18.2, "cohesion": 6.0, "friction_angle": 12.3},
+                {"name": "素填土", "thickness": 0.6, "unit_weight": 18.7, "cohesion": 18.0, "friction_angle": 12.3},
+                {"name": "粉质黏土", "thickness": 5.0, "unit_weight": 19.0, "cohesion": 26.0, "friction_angle": 14.3},
+                {"name": "粉质黏土", "thickness": 4.2, "unit_weight": 19.8, "cohesion": 43.2, "friction_angle": 21.0},
+                {"name": "粉质黏土混卵砾石", "thickness": 4.0, "unit_weight": 20.5, "cohesion": 28.5, "friction_angle": 23.5},
+                {"name": "强风化粉砂岩", "thickness": 6.8, "unit_weight": 21.0, "cohesion": 28.5, "friction_angle": 22.5},
+                {"name": "中风化粉砂岩粉砂岩", "thickness": 27.0, "unit_weight": 22.2, "cohesion": 55.1, "friction_angle": 30.7},
+            ],
+        },
     ]
-    
+
+
+def normalize_layers(layer_defs):
+    layers = []
+    serialized_layers = []
+    current_depth = 0.0
+
+    for index, layer_def in enumerate(layer_defs, start=1):
+        if isinstance(layer_def, SoilLayer):
+            layer = SoilLayer(
+                layer_def.name,
+                layer_def.thickness,
+                layer_def.unit_weight,
+                layer_def.cohesion,
+                layer_def.friction_angle,
+            )
+            mode = getattr(layer_def, "mode", "水土合算")
+        else:
+            layer = SoilLayer(
+                layer_def["name"],
+                float(layer_def["thickness"]),
+                float(layer_def["unit_weight"]),
+                float(layer_def["cohesion"]),
+                float(layer_def["friction_angle"]),
+            )
+            mode = layer_def.get("mode", "水土合算")
+
+        top_depth = round(current_depth, 3)
+        bottom_depth = round(current_depth + layer.thickness, 3)
+        layers.append(layer)
+        serialized_layers.append(
+            {
+                "index": index,
+                "name": layer.name,
+                "thickness": round(layer.thickness, 3),
+                "unit_weight": round(layer.unit_weight, 3),
+                "cohesion": round(layer.cohesion, 3),
+                "friction_angle": round(layer.friction_angle, 3),
+                "mode": mode,
+                "top_depth": top_depth,
+                "bottom_depth": bottom_depth,
+            }
+        )
+        current_depth = bottom_depth
+
+    return layers, serialized_layers
+
+
+def serialize_point(point):
+    if point is None:
+        return None
+
+    return {
+        "z": round(point.z, 3),
+        "position": point.position,
+        "layer_name": point.layer_name,
+        "point_type": point.point_type,
+        "sigma_v": round(point.sigma_v, 3),
+        "pa": round(point.pa, 3),
+        "pp": round(point.pp, 3),
+        "p_net": round(point.p_net, 3),
+        "is_nominal": bool(getattr(point, "is_nominal", False)),
+    }
+
+
+def analyze_stage(
+    layers,
+    overload,
+    excavation_depth,
+    pile_top_z=DEFAULT_PILE_TOP_Z,
+    strut_depth=None,
+    previous_struts=None,
+):
+    z_data = z_based_data_collection(layers, overload, excavation_depth)
+    update_passive_pressures(z_data, excavation_depth)
+    excavation_point = build_excavation_point(z_data, excavation_depth)
+    boundary_results = BoundaryResults(
+        excavation_point=excavation_point,
+        critical_points=find_critical_points(z_data, pile_top_z, excavation_depth),
+        inflection_point=find_inflection_point(z_data, excavation_depth, excavation_point, log_fallback=False),
+    )
+    pressure_report = compute_soil_pressure(z_data, boundary_results)
+
+    inflection_point = boundary_results.inflection_point
+    strut_force = None
+    if inflection_point is not None and strut_depth is not None:
+        strut_force = calculate_multi_strut_force(
+            pressure_report,
+            inflection_point.z,
+            strut_depth,
+            previous_struts,
+        )
+
+    warnings = []
+    if inflection_point is None:
+        warnings.append("未发现反弯点，结果中不包含支撑轴力。")
+    elif getattr(inflection_point, "is_nominal", False):
+        warnings.append(f"未发现自然土压力零点，已采用 1.2H = {inflection_point.z}m 作为名义反弯点。")
+
+    return {
+        "excavation_depth": round(excavation_depth, 3),
+        "strut_depth": None if strut_depth is None else round(strut_depth, 3),
+        "inflection_point": serialize_point(inflection_point),
+        "excavation_point": serialize_point(boundary_results.excavation_point),
+        "critical_points": [serialize_point(point) for point in boundary_results.critical_points],
+        "pressure_report": {
+            "active": [
+                {
+                    "range": item["range"],
+                    "force": round(item["f"], 3),
+                    "centroid_depth": round(item["z_c"], 3),
+                }
+                for item in pressure_report["active"]
+            ],
+            "passive": [
+                {
+                    "range": item["range"],
+                    "force": round(item["f"], 3),
+                    "centroid_depth": round(item["z_c"], 3),
+                }
+                for item in pressure_report["passive"]
+            ],
+        },
+        "strut_force": strut_force,
+        "warnings": warnings,
+        "points": [serialize_point(point) for point in z_data],
+    }
+
+
+def analyze_scenario_dataset(
+    name,
+    layer_defs,
+    overload,
+    pile_top_z=DEFAULT_PILE_TOP_Z,
+    construction_stages=None,
+):
+    layers, serialized_layers = normalize_layers(layer_defs)
+    stages = construction_stages or []
+    installed_struts = []
+    stage_results = []
+
+    for index, stage in enumerate(stages, start=1):
+        stage_result = analyze_stage(
+            layers,
+            overload,
+            stage["excavation"],
+            pile_top_z=pile_top_z,
+            strut_depth=stage.get("strut"),
+            previous_struts=installed_struts,
+        )
+        stage_result["label"] = stage.get("label", f"工况 {index}")
+        if stage_result["strut_force"] is not None and stage_result["strut_depth"] is not None:
+            installed_struts.append(
+                {"pos": stage_result["strut_depth"], "force": stage_result["strut_force"]}
+            )
+        stage_results.append(stage_result)
+
+    return {
+        "name": name,
+        "overload": round(float(overload), 3),
+        "pile_top_z": round(float(pile_top_z), 3),
+        "layers": serialized_layers,
+        "stages": stage_results,
+    }
+
+
+def build_default_result_datasets():
+    return [
+        analyze_scenario_dataset(
+            scenario["name"],
+            scenario["layers"],
+            scenario["overload"],
+            pile_top_z=DEFAULT_PILE_TOP_Z,
+            construction_stages=DEFAULT_CONSTRUCTION_STAGES,
+        )
+        for scenario in build_default_scenarios()
+    ]
+
+if __name__ == "__main__":
+    scenarios = build_default_scenarios()
+
     for scenario in scenarios:
         installed_struts = []
         index = 1
-        print(f"===对于截面：{scenario["name"]}===")
+        print(f"===对于截面：{scenario['name']}===")
         z_data = None
-        for stage in construction_stages:
+        layers, _ = normalize_layers(scenario["layers"])
+        for stage in DEFAULT_CONSTRUCTION_STAGES:
             curr_excavation = stage["excavation"]
             curr_strut = stage["strut"]
-            curr_layers = scenario["layers"]
             curr_overload = scenario["overload"]
             # 1. 重新生成当前开挖深度下的数据链
-            z_data = z_based_data_collection(curr_layers, curr_overload, curr_excavation)
+            z_data = z_based_data_collection(layers, curr_overload, curr_excavation)
             # for point in z_data:
             #     print(f"高度: {point.z:>6}m | "
             #           f"位置: {point.position:<6} | "
@@ -890,7 +1066,7 @@ if __name__ == "__main__":
             excavation_point = build_excavation_point(z_data, curr_excavation)
             boundary_results = BoundaryResults(
                 excavation_point=excavation_point,
-                critical_points=find_critical_points(z_data, depth_pile, curr_excavation),
+                critical_points=find_critical_points(z_data, DEFAULT_PILE_TOP_Z, curr_excavation),
                 inflection_point=find_inflection_point(z_data, curr_excavation, excavation_point),
             )
             # 3. 计算当前工况的压力区间
