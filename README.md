@@ -67,3 +67,6 @@ class AnalysisPoint:
 
 # 四、通信图
 - calc2.py 通信图：`calc2_通信图.md`
+
+# 五、逻辑图
+- calc2.py 逻辑图：`calc2_逻辑图.md`
