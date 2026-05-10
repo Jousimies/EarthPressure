@@ -1,43 +1,384 @@
 import tkinter as tk
-from tkinter import ttk, messagebox
+from tkinter import messagebox, ttk
+
+from calc2 import (
+    DEFAULT_CONSTRUCTION_STAGES,
+    DEFAULT_PILE_TOP_Z,
+    analyze_scenario_dataset,
+    build_default_result_datasets,
+    build_default_scenarios,
+)
+
+
+class ResultViewer(tk.Toplevel):
+    LAYER_COLORS = [
+        "#F4D06F",
+        "#FF9B85",
+        "#B8E0D2",
+        "#A9DEF9",
+        "#E4C1F9",
+        "#CDE7BE",
+        "#FFD6A5",
+        "#D0F4DE",
+    ]
+
+    def __init__(self, master, datasets):
+        super().__init__(master)
+        self.title("土层结果展示")
+        self.geometry("1240x860")
+        self.minsize(1080, 760)
+        self.datasets = datasets
+        self.current_dataset_index = 0
+        self.current_stage_index = 0
+
+        self.dataset_title_var = tk.StringVar()
+        self.dataset_meta_var = tk.StringVar()
+        self.stage_summary_var = tk.StringVar()
+        self.warning_var = tk.StringVar()
+
+        self._build_layout()
+        self.select_dataset(0)
+
+    def _build_layout(self):
+        selector_frame = tk.LabelFrame(self, text="结果切换", padx=10, pady=8)
+        selector_frame.pack(fill="x", padx=12, pady=(12, 6))
+        self.dataset_button_frame = tk.Frame(selector_frame)
+        self.dataset_button_frame.pack(fill="x")
+
+        info_frame = tk.Frame(self)
+        info_frame.pack(fill="x", padx=12, pady=6)
+        tk.Label(
+            info_frame,
+            textvariable=self.dataset_title_var,
+            font=("微软雅黑", 13, "bold"),
+            anchor="w",
+        ).pack(fill="x")
+        tk.Label(info_frame, textvariable=self.dataset_meta_var, anchor="w").pack(fill="x", pady=(2, 0))
+
+        paned = ttk.PanedWindow(self, orient="horizontal")
+        paned.pack(fill="both", expand=True, padx=12, pady=6)
+
+        left_frame = tk.LabelFrame(paned, text="土层数据", padx=8, pady=8)
+        right_frame = tk.Frame(paned)
+        paned.add(left_frame, weight=3)
+        paned.add(right_frame, weight=4)
+
+        layer_columns = ("index", "name", "thickness", "gamma", "c", "phi", "mode", "depth")
+        self.layer_tree = ttk.Treeview(left_frame, columns=layer_columns, show="headings", height=16)
+        layer_headings = {
+            "index": "序号",
+            "name": "名称",
+            "thickness": "厚度(m)",
+            "gamma": "重度(kN/m³)",
+            "c": "粘聚力(kPa)",
+            "phi": "摩擦角(°)",
+            "mode": "水土计算",
+            "depth": "深度范围(m)",
+        }
+        widths = {"index": 50, "name": 120, "thickness": 80, "gamma": 100, "c": 95, "phi": 90, "mode": 90, "depth": 110}
+        for column, title in layer_headings.items():
+            self.layer_tree.heading(column, text=title)
+            self.layer_tree.column(column, width=widths[column], anchor="center")
+        layer_scroll = ttk.Scrollbar(left_frame, orient="vertical", command=self.layer_tree.yview)
+        self.layer_tree.configure(yscrollcommand=layer_scroll.set)
+        self.layer_tree.pack(side="left", fill="both", expand=True)
+        layer_scroll.pack(side="right", fill="y")
+
+        stage_frame = tk.LabelFrame(right_frame, text="工况切换", padx=8, pady=8)
+        stage_frame.pack(fill="x", pady=(0, 6))
+        self.stage_button_frame = tk.Frame(stage_frame)
+        self.stage_button_frame.pack(fill="x")
+
+        schematic_frame = tk.LabelFrame(right_frame, text="土层示意图", padx=8, pady=8)
+        schematic_frame.pack(fill="both", expand=True)
+        self.canvas = tk.Canvas(schematic_frame, bg="white", highlightthickness=0)
+        self.canvas.pack(fill="both", expand=True)
+
+        bottom_frame = tk.Frame(self)
+        bottom_frame.pack(fill="both", expand=False, padx=12, pady=(0, 12))
+
+        summary_frame = tk.LabelFrame(bottom_frame, text="当前工况结果", padx=8, pady=8)
+        summary_frame.pack(fill="x", pady=(0, 6))
+        tk.Label(summary_frame, textvariable=self.stage_summary_var, justify="left", anchor="w").pack(fill="x")
+        tk.Label(summary_frame, textvariable=self.warning_var, fg="#B23A48", justify="left", anchor="w").pack(
+            fill="x", pady=(4, 0)
+        )
+
+        pressure_paned = ttk.PanedWindow(bottom_frame, orient="horizontal")
+        pressure_paned.pack(fill="both", expand=True)
+        active_frame = tk.LabelFrame(pressure_paned, text="主动土压力分段", padx=8, pady=8)
+        passive_frame = tk.LabelFrame(pressure_paned, text="被动土压力分段", padx=8, pady=8)
+        pressure_paned.add(active_frame, weight=1)
+        pressure_paned.add(passive_frame, weight=1)
+
+        pressure_columns = ("range", "force", "centroid")
+        self.active_tree = self._build_pressure_tree(active_frame, pressure_columns)
+        self.passive_tree = self._build_pressure_tree(passive_frame, pressure_columns)
+
+    def _build_pressure_tree(self, parent, columns):
+        tree = ttk.Treeview(parent, columns=columns, show="headings", height=8)
+        tree.heading("range", text="区间(m)")
+        tree.heading("force", text="合力(kN/m)")
+        tree.heading("centroid", text="形心深度(m)")
+        tree.column("range", width=130, anchor="center")
+        tree.column("force", width=120, anchor="center")
+        tree.column("centroid", width=120, anchor="center")
+        scroll = ttk.Scrollbar(parent, orient="vertical", command=tree.yview)
+        tree.configure(yscrollcommand=scroll.set)
+        tree.pack(side="left", fill="both", expand=True)
+        scroll.pack(side="right", fill="y")
+        return tree
+
+    def select_dataset(self, dataset_index):
+        self.current_dataset_index = dataset_index
+        self.current_stage_index = 0
+        self._render_dataset_buttons()
+        self._render_stage_buttons()
+        self._refresh_dataset_view()
+
+    def select_stage(self, stage_index):
+        self.current_stage_index = stage_index
+        self._render_stage_buttons()
+        self._refresh_stage_view()
+
+    def _render_dataset_buttons(self):
+        for child in self.dataset_button_frame.winfo_children():
+            child.destroy()
+
+        for index, dataset in enumerate(self.datasets):
+            button = tk.Button(
+                self.dataset_button_frame,
+                text=dataset["name"],
+                command=lambda value=index: self.select_dataset(value),
+                bg="#2F6690" if index == self.current_dataset_index else "#E8EEF2",
+                fg="white" if index == self.current_dataset_index else "#22333B",
+                relief="sunken" if index == self.current_dataset_index else "raised",
+                padx=12,
+                pady=4,
+            )
+            button.pack(side="left", padx=4, pady=2)
+
+    def _render_stage_buttons(self):
+        for child in self.stage_button_frame.winfo_children():
+            child.destroy()
+
+        dataset = self.datasets[self.current_dataset_index]
+        for index, stage in enumerate(dataset["stages"]):
+            button = tk.Button(
+                self.stage_button_frame,
+                text=stage["label"],
+                command=lambda value=index: self.select_stage(value),
+                bg="#3A7D44" if index == self.current_stage_index else "#F3F4F6",
+                fg="white" if index == self.current_stage_index else "#1F2933",
+                relief="sunken" if index == self.current_stage_index else "raised",
+                padx=10,
+                pady=3,
+            )
+            button.pack(side="left", padx=4, pady=2)
+
+    def _refresh_dataset_view(self):
+        dataset = self.datasets[self.current_dataset_index]
+        self.dataset_title_var.set(dataset["name"])
+        self.dataset_meta_var.set(
+            f"地表超载 q = {dataset['overload']} kPa    |    桩顶高度 = {dataset['pile_top_z']} m    |    土层数 = {len(dataset['layers'])}"
+        )
+
+        for item in self.layer_tree.get_children():
+            self.layer_tree.delete(item)
+        for layer in dataset["layers"]:
+            self.layer_tree.insert(
+                "",
+                "end",
+                values=(
+                    layer["index"],
+                    layer["name"],
+                    f"{layer['thickness']:.2f}",
+                    f"{layer['unit_weight']:.2f}",
+                    f"{layer['cohesion']:.2f}",
+                    f"{layer['friction_angle']:.2f}",
+                    layer["mode"],
+                    f"{layer['top_depth']:.2f} ~ {layer['bottom_depth']:.2f}",
+                ),
+            )
+
+        self._refresh_stage_view()
+
+    def _refresh_stage_view(self):
+        dataset = self.datasets[self.current_dataset_index]
+        stage = dataset["stages"][self.current_stage_index]
+        strut_position = "-" if stage["strut_depth"] is None else f"{stage['strut_depth']:.2f} m"
+
+        critical_depths = "、".join(f"{point['z']:.2f}m" for point in stage["critical_points"]) or "无"
+        inflection_depth = "未识别"
+        if stage["inflection_point"] is not None:
+            inflection_depth = f"{stage['inflection_point']['z']:.2f}m"
+        strut_force = "未计算"
+        if stage["strut_force"] is not None:
+            strut_force = f"{stage['strut_force']:.2f} kN/m"
+
+        self.stage_summary_var.set(
+            "\n".join(
+                [
+                    f"开挖深度：{stage['excavation_depth']:.2f} m",
+                    f"支撑位置：{strut_position}",
+                    f"反弯点：{inflection_depth}",
+                    f"临界深度：{critical_depths}",
+                    f"支撑轴力：{strut_force}",
+                ]
+            )
+        )
+        self.warning_var.set("\n".join(stage["warnings"]) if stage["warnings"] else "")
+
+        self._populate_pressure_tree(self.active_tree, stage["pressure_report"]["active"])
+        self._populate_pressure_tree(self.passive_tree, stage["pressure_report"]["passive"])
+        self._draw_schematic(dataset, stage)
+
+    def _populate_pressure_tree(self, tree, items):
+        for item in tree.get_children():
+            tree.delete(item)
+
+        if not items:
+            tree.insert("", "end", values=("无", "-", "-"))
+            return
+
+        for item in items:
+            tree.insert(
+                "",
+                "end",
+                values=(item["range"], f"{item['force']:.2f}", f"{item['centroid_depth']:.2f}"),
+            )
+
+    def _draw_schematic(self, dataset, stage):
+        self.canvas.delete("all")
+        self.canvas.update_idletasks()
+
+        canvas_width = max(self.canvas.winfo_width(), 420)
+        canvas_height = max(self.canvas.winfo_height(), 420)
+        top_margin = 35
+        bottom_margin = 30
+        profile_left = 80
+        profile_right = 260
+
+        max_marker_depth = stage["excavation_depth"]
+        if stage["inflection_point"] is not None:
+            max_marker_depth = max(max_marker_depth, stage["inflection_point"]["z"])
+        for point in stage["critical_points"]:
+            max_marker_depth = max(max_marker_depth, point["z"])
+        total_depth = max(dataset["layers"][-1]["bottom_depth"], max_marker_depth)
+        depth_span = max(total_depth, 1.0)
+        usable_height = canvas_height - top_margin - bottom_margin
+
+        self.canvas.create_line(profile_left, top_margin, profile_left, canvas_height - bottom_margin, width=2)
+        self.canvas.create_line(profile_right, top_margin, profile_right, canvas_height - bottom_margin, width=2)
+        self.canvas.create_text((profile_left + profile_right) / 2, 16, text="土层剖面", font=("微软雅黑", 11, "bold"))
+
+        for index, layer in enumerate(dataset["layers"]):
+            y1 = top_margin + usable_height * (layer["top_depth"] / depth_span)
+            y2 = top_margin + usable_height * (layer["bottom_depth"] / depth_span)
+            color = self.LAYER_COLORS[index % len(self.LAYER_COLORS)]
+            self.canvas.create_rectangle(profile_left, y1, profile_right, y2, fill=color, outline="#4A4E69")
+            label_y = (y1 + y2) / 2
+            self.canvas.create_text(
+                (profile_left + profile_right) / 2,
+                label_y,
+                text=f"{layer['name']}\n{layer['top_depth']:.1f}-{layer['bottom_depth']:.1f}m",
+                width=150,
+                font=("微软雅黑", 9),
+            )
+            self.canvas.create_text(profile_left - 30, y1, text=f"{layer['top_depth']:.1f}", anchor="e")
+
+        self.canvas.create_text(profile_left - 30, canvas_height - bottom_margin, text=f"{depth_span:.1f}", anchor="e")
+        self._draw_depth_marker(profile_left, profile_right, top_margin, usable_height, depth_span, stage["excavation_depth"], "#D62828", "开挖面")
+
+        if stage["strut_depth"] is not None:
+            y = top_margin + usable_height * (stage["strut_depth"] / depth_span)
+            self.canvas.create_line(profile_right + 10, y, canvas_width - 160, y, fill="#1D4ED8", width=3)
+            self.canvas.create_oval(canvas_width - 168, y - 6, canvas_width - 156, y + 6, fill="#1D4ED8", outline="")
+            self.canvas.create_text(canvas_width - 148, y, text=f"支撑 {stage['strut_depth']:.2f}m", anchor="w", fill="#1D4ED8")
+
+        if stage["inflection_point"] is not None:
+            self._draw_depth_marker(
+                profile_left,
+                profile_right,
+                top_margin,
+                usable_height,
+                depth_span,
+                stage["inflection_point"]["z"],
+                "#7B2CBF",
+                "反弯点",
+            )
+
+        for point in stage["critical_points"]:
+            self._draw_depth_marker(
+                profile_left,
+                profile_right,
+                top_margin,
+                usable_height,
+                depth_span,
+                point["z"],
+                "#FF8800",
+                "临界点",
+                offset=20,
+            )
+
+    def _draw_depth_marker(self, left, right, top_margin, usable_height, depth_span, depth, color, label, offset=0):
+        y = top_margin + usable_height * (depth / depth_span)
+        self.canvas.create_line(left - 10, y, right + 10, y, fill=color, width=2, dash=(6, 4))
+        self.canvas.create_text(right + 20 + offset, y, text=f"{label} {depth:.2f}m", anchor="w", fill=color)
+
 
 class SoilApp:
     def __init__(self, root):
         self.root = root
-        self.root.title("基坑土压力计算 v1.0")
-        self.root.geometry("900x650") # 稍微调宽以容纳更多顶部参数
-        self.layers = [] 
+        self.root.title("基坑土压力计算 v2.0")
+        self.root.geometry("980x720")
+        self.layers = []
+        self.example_scenarios = build_default_scenarios()
 
-        # --- 1. 基本参数区 ---
-        header_frame = tk.LabelFrame(root, text=" 1. 工程全局参数 ", padx=10, pady=10)
+        self._build_layout()
+
+    def _build_layout(self):
+        header_frame = tk.LabelFrame(self.root, text="1. 工程全局参数", padx=10, pady=10)
         header_frame.pack(fill="x", padx=15, pady=10)
 
-        # 使用不同的 column 索引防止重叠
         tk.Label(header_frame, text="开挖深度 H (m):").grid(row=0, column=0, sticky="w", padx=5)
         self.excavation_depth_entry = tk.Entry(header_frame, width=12)
         self.excavation_depth_entry.grid(row=0, column=1, padx=5)
-        
+
         tk.Label(header_frame, text="地表超载 q (kPa):").grid(row=0, column=2, sticky="w", padx=5)
         self.overload_entry = tk.Entry(header_frame, width=12)
-        self.overload_entry.insert(0, "0") 
+        self.overload_entry.insert(0, "0")
         self.overload_entry.grid(row=0, column=3, padx=5)
 
         tk.Label(header_frame, text="桩顶高度 (m):").grid(row=0, column=4, sticky="w", padx=5)
         self.pile_depth_entry = tk.Entry(header_frame, width=12)
-        self.pile_depth_entry.insert(0, "0")
+        self.pile_depth_entry.insert(0, str(DEFAULT_PILE_TOP_Z))
         self.pile_depth_entry.grid(row=0, column=5, padx=5)
 
-        # --- 2. 土层输入区 ---
-        input_frame = tk.LabelFrame(root, text=" 2. 添加土层参数 ", padx=10, pady=10)
+        example_frame = tk.LabelFrame(self.root, text="2. 示例土层快速加载", padx=10, pady=10)
+        example_frame.pack(fill="x", padx=15, pady=5)
+        tk.Label(example_frame, text="选择截面:").pack(side="left", padx=(0, 6))
+        self.example_selector = ttk.Combobox(
+            example_frame,
+            values=[scenario["name"] for scenario in self.example_scenarios],
+            state="readonly",
+            width=18,
+        )
+        self.example_selector.current(0)
+        self.example_selector.pack(side="left", padx=4)
+        tk.Button(example_frame, text="载入到输入区", command=self.load_example_layers).pack(side="left", padx=8)
+        tk.Button(example_frame, text="仅查看示例结果", command=self.open_default_results).pack(side="left", padx=8)
+
+        input_frame = tk.LabelFrame(self.root, text="3. 添加土层参数", padx=10, pady=10)
         input_frame.pack(fill="x", padx=15, pady=5)
 
         col_tags = ["名称", "厚度(m)", "重度(kN/m³)", "粘聚力c(kPa)", "摩擦角φ(°)", "水土计算"]
-        for i, tag in enumerate(col_tags):
-            tk.Label(input_frame, text=tag, font=("微软雅黑", 9, "bold")).grid(row=0, column=i, pady=5)
-            
+        for index, tag in enumerate(col_tags):
+            tk.Label(input_frame, text=tag, font=("微软雅黑", 9, "bold")).grid(row=0, column=index, pady=5)
+
         self.name_ent = tk.Entry(input_frame, width=12)
         self.thick_ent = tk.Entry(input_frame, width=10)
-        self.gamma_ent = tk.Entry(input_frame, width=10) 
+        self.gamma_ent = tk.Entry(input_frame, width=10)
         self.cohesion_ent = tk.Entry(input_frame, width=10)
         self.phi_ent = tk.Entry(input_frame, width=10)
         self.calc_mode = ttk.Combobox(input_frame, values=["水土合算", "水土分算"], width=12, state="readonly")
@@ -50,85 +391,158 @@ class SoilApp:
         self.phi_ent.grid(row=1, column=4, padx=2)
         self.calc_mode.grid(row=1, column=5, padx=2)
 
-        self.add_btn = tk.Button(input_frame, text="添加此层", command=self.add_layer, 
-                                 bg="#f0f0f0", activebackground="#dcdcdc", width=10)
-        self.add_btn.grid(row=1, column=6, padx=10)
+        tk.Button(input_frame, text="添加此层", command=self.add_layer, width=10).grid(row=1, column=6, padx=10)
+        tk.Button(input_frame, text="删除选中层", command=self.remove_selected_layer, width=10).grid(row=1, column=7, padx=4)
+        tk.Button(input_frame, text="清空全部", command=self.clear_layers, width=10).grid(row=1, column=8, padx=4)
 
-        # --- 3. 列表展示区 ---
-        list_frame = tk.LabelFrame(root, text=" 3. 土层列表（自上而下） ", padx=10, pady=10)
+        list_frame = tk.LabelFrame(self.root, text="4. 土层列表（自上而下）", padx=10, pady=10)
         list_frame.pack(fill="both", expand=True, padx=15, pady=5)
 
         columns = ("name", "thick", "gamma", "c", "phi", "mode")
         self.tree = ttk.Treeview(list_frame, columns=columns, show="headings")
-        
-        headings = {"name": "名称", "thick": "厚度(m)", "gamma": "重度(kN/m³)", "c": "粘聚力(kPa)", "phi": "摩擦角(°)", "mode": "水土计算"}
+        headings = {
+            "name": "名称",
+            "thick": "厚度(m)",
+            "gamma": "重度(kN/m³)",
+            "c": "粘聚力(kPa)",
+            "phi": "摩擦角(°)",
+            "mode": "水土计算",
+        }
         for col, text in headings.items():
             self.tree.heading(col, text=text)
-            self.tree.column(col, width=120, anchor="center")
-        
-        # 添加垂直滚动条
+            self.tree.column(col, width=130, anchor="center")
+
         scrollbar = ttk.Scrollbar(list_frame, orient="vertical", command=self.tree.yview)
-        self.tree.configure(yscroll=scrollbar.set)
+        self.tree.configure(yscrollcommand=scrollbar.set)
         self.tree.pack(side="left", fill="both", expand=True)
         scrollbar.pack(side="right", fill="y")
 
-        # --- 4. 提交计算按钮 ---
-        # 修正：fg="white" 提高对比度
-        self.submit_btn = tk.Button(root, text="确 认 并 开 始 计 算", command=self.submit_data, 
-                                   bg="ForestGreen", fg="white", 
-                                   activebackground="DarkGreen", activeforeground="white",
-                                   font=("微软雅黑", 12, "bold"), pady=10)
+        self.submit_btn = tk.Button(
+            self.root,
+            text="确认并计算 + 打开结果界面",
+            command=self.submit_data,
+            bg="ForestGreen",
+            fg="white",
+            activebackground="DarkGreen",
+            activeforeground="white",
+            font=("微软雅黑", 12, "bold"),
+            pady=10,
+        )
         self.submit_btn.pack(fill="x", padx=15, pady=15)
 
     def add_layer(self):
         try:
-            name = self.name_ent.get().strip()
-            thick = float(self.thick_ent.get())
-            gamma = float(self.gamma_ent.get())
-            c = float(self.cohesion_ent.get())
-            phi = float(self.phi_ent.get())
-            mode = self.calc_mode.get()
+            layer = {
+                "name": self.name_ent.get().strip(),
+                "thickness": float(self.thick_ent.get()),
+                "unit_weight": float(self.gamma_ent.get()),
+                "cohesion": float(self.cohesion_ent.get()),
+                "friction_angle": float(self.phi_ent.get()),
+                "mode": self.calc_mode.get(),
+            }
+            if not layer["name"]:
+                raise ValueError("名称不能为空")
+            if layer["thickness"] <= 0 or layer["unit_weight"] <= 0:
+                raise ValueError("厚度和重度必须大于 0")
 
-            if not name: raise ValueError("名称不能为空")
-            
-            data = (name, f"{thick:.2f}", f"{gamma:.2f}", f"{c:.2f}", f"{phi:.2f}", mode)
-            self.layers.append(data)
-            self.tree.insert("", "end", values=data)
-            
-            # 清空输入框以便下次输入
-            for ent in [self.name_ent, self.thick_ent, self.gamma_ent, self.cohesion_ent, self.phi_ent]:
-                ent.delete(0, tk.END)
-            self.name_ent.focus_set() # 焦点回到名称框
-            
-        except ValueError as e:
-            messagebox.showerror("格式错误", f"请输入有效的数值！\n错误详情: {e}")
+            self.layers.append(layer)
+            self.tree.insert(
+                "",
+                "end",
+                values=(
+                    layer["name"],
+                    f"{layer['thickness']:.2f}",
+                    f"{layer['unit_weight']:.2f}",
+                    f"{layer['cohesion']:.2f}",
+                    f"{layer['friction_angle']:.2f}",
+                    layer["mode"],
+                ),
+            )
+
+            for entry in [self.name_ent, self.thick_ent, self.gamma_ent, self.cohesion_ent, self.phi_ent]:
+                entry.delete(0, tk.END)
+            self.name_ent.focus_set()
+        except ValueError as error:
+            messagebox.showerror("格式错误", f"请输入有效的土层参数。\n错误详情：{error}")
+
+    def remove_selected_layer(self):
+        selected = self.tree.selection()
+        if not selected:
+            messagebox.showinfo("提示", "请先选中要删除的土层。")
+            return
+
+        indices = sorted((self.tree.index(item) for item in selected), reverse=True)
+        for item in selected:
+            self.tree.delete(item)
+        for index in indices:
+            self.layers.pop(index)
+
+    def clear_layers(self):
+        self.layers.clear()
+        for item in self.tree.get_children():
+            self.tree.delete(item)
+
+    def load_example_layers(self):
+        scenario = self.example_scenarios[self.example_selector.current()]
+        self.clear_layers()
+        self.overload_entry.delete(0, tk.END)
+        self.overload_entry.insert(0, str(scenario["overload"]))
+        self.pile_depth_entry.delete(0, tk.END)
+        self.pile_depth_entry.insert(0, str(DEFAULT_PILE_TOP_Z))
+
+        self.excavation_depth_entry.delete(0, tk.END)
+        self.excavation_depth_entry.insert(0, str(DEFAULT_CONSTRUCTION_STAGES[0]["excavation"]))
+
+        for layer in scenario["layers"]:
+            copied = dict(layer)
+            copied["mode"] = copied.get("mode", "水土合算")
+            self.layers.append(copied)
+            self.tree.insert(
+                "",
+                "end",
+                values=(
+                    copied["name"],
+                    f"{copied['thickness']:.2f}",
+                    f"{copied['unit_weight']:.2f}",
+                    f"{copied['cohesion']:.2f}",
+                    f"{copied['friction_angle']:.2f}",
+                    copied["mode"],
+                ),
+            )
+
+    def open_default_results(self):
+        ResultViewer(self.root, build_default_result_datasets())
 
     def submit_data(self):
         if not self.layers:
-            messagebox.showwarning("提示", "请至少添加一个土层！")
+            messagebox.showwarning("提示", "请至少添加一个土层。")
             return
+
         try:
-            h_exc = float(self.excavation_depth_entry.get())
-            q_over = float(self.overload_entry.get())
-            p_top = float(self.pile_depth_entry.get())
-            
-            msg = (f"参数确认：\n"
-                   f"开挖深度: {h_exc} m\n"
-                   f"地表超载: {q_over} kPa\n"
-                   f"桩顶高度: {p_top} m\n"
-                   f"土层总数: {len(self.layers)} 层\n\n"
-                   "确认开始计算吗？")
-            
-            if messagebox.askyesno("确认提交", msg):
-                # 后面接入你的 SoilLayer 实例化逻辑和压力计算逻辑
-                pass
-            
+            excavation_depth = float(self.excavation_depth_entry.get())
+            overload = float(self.overload_entry.get())
+            pile_top_z = float(self.pile_depth_entry.get())
         except ValueError:
-            messagebox.showerror("错误", "全局参数（深度/超载/桩顶）必须为数字")
+            messagebox.showerror("错误", "全局参数（开挖深度/超载/桩顶）必须为数字。")
+            return
+
+        if excavation_depth <= 0:
+            messagebox.showerror("错误", "开挖深度必须大于 0。")
+            return
+
+        custom_dataset = analyze_scenario_dataset(
+            "当前输入",
+            self.layers,
+            overload,
+            pile_top_z=pile_top_z,
+            construction_stages=[{"label": "当前工况", "excavation": excavation_depth}],
+        )
+        datasets = [custom_dataset] + build_default_result_datasets()
+        ResultViewer(self.root, datasets)
+
 
 if __name__ == "__main__":
     root = tk.Tk()
-    default_font = ("微软雅黑", 9)
-    root.option_add("*Font", default_font)
-    app = SoilApp(root)
+    root.option_add("*Font", ("微软雅黑", 9))
+    SoilApp(root)
     root.mainloop()
