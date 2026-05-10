@@ -62,7 +62,10 @@ class BoundaryResults:
 
     def all_boundary_points(self):
         """返回所有独立求得的边界点，供局部合并后的分段计算使用。"""
-        points = list(self.critical_points)
+        points = []
+        if self.excavation_point is not None:
+            points.append(self.excavation_point)
+        points.extend(self.critical_points)
         if self.inflection_point is not None:
             points.append(self.inflection_point)
         return points
@@ -128,26 +131,14 @@ def z_based_data_collection(layers, overload, excavation_depth):
         # --- 1. 处理层顶 (TOP) ---
         top_p = create_analysis_point(z_top, "TOP", "Interface", layer, current_sigma_v, z_top)
         top_p.layer_index = i
-        # 修正：如果层顶正好是开挖面
-        if abs(z_top - excavation_depth) < 1e-4:
-            top_p.point_type = "Excavation"
         z_axis_data.append(top_p)
 
-        # --- 2. 处理开挖面在层中间的情况 (MID) ---
-        if z_top < excavation_depth < z_bottom:
-            mid_p = create_analysis_point(excavation_depth, "MID", "Excavation", layer, current_sigma_v, z_top)
-            mid_p.layer_index = i
-            z_axis_data.append(mid_p)
-
-        # --- 3. 更新参数并处理层底 (BOTTOM) ---
+        # --- 2. 更新参数并处理层底 (BOTTOM) ---
         # 计算该层底部的垂直应力（为下一层做准备）
         next_sigma_v = current_sigma_v + layer.unit_weight * layer.thickness
         
         bot_p = create_analysis_point(z_bottom, "BOTTOM", "Interface", layer, current_sigma_v, z_top)
         bot_p.layer_index = i
-        # 修正：如果层底正好是开挖面
-        if abs(z_bottom - excavation_depth) < 1e-4:
-            bot_p.point_type = "Excavation"
         z_axis_data.append(bot_p)
 
         # 迭代深度和应力
@@ -180,6 +171,40 @@ def get_layer_top_point(z_axis_data, layer_index):
         if point.layer_index == layer_index and point.position == "TOP":
             return point
     return None
+
+
+def build_excavation_point(z_axis_data, excavation_depth):
+    """
+    独立构建开挖面边界点，不把该点写回 z_axis_data。
+    """
+    exact_point = next(
+        (point for point in z_axis_data if abs(point.z - excavation_depth) <= DEPTH_TOLERANCE),
+        None,
+    )
+    if exact_point is not None:
+        excavation_point = AnalysisPoint(
+            excavation_depth,
+            exact_point.position,
+            exact_point.layer_index,
+            exact_point.layer,
+        )
+        excavation_point.layer_name = exact_point.layer_name
+        excavation_point.sigma_v = exact_point.sigma_v
+        excavation_point.pa = exact_point.pa
+        excavation_point.pp = exact_point.pp
+        excavation_point.p_net = exact_point.p_net
+        excavation_point.point_type = "Excavation"
+        return excavation_point
+
+    layer_info = find_layer_at_depth(z_axis_data, excavation_depth)
+    if layer_info is None:
+        return None
+
+    layer = layer_info["top"].layer
+    excavation_point = AnalysisPoint(excavation_depth, "MID", layer_info["top"].layer_index, layer)
+    excavation_point.point_type = "Excavation"
+    populate_boundary_point_data(excavation_point, excavation_depth, z_axis_data)
+    return excavation_point
 
 
 def populate_boundary_point_data(point, excavation_depth, z_axis_data, set_pa_to_zero=False, set_p_net_to_zero=False):
@@ -381,15 +406,21 @@ def create_interpolated_boundary_point(p_top, p_bot, target_z, point_type, set_p
     return point
 
 
-def find_inflection_point(z_axis_data, excavation_depth):
+def find_inflection_point(z_axis_data, excavation_depth, excavation_point=None):
     """
     寻找反弯点：优先寻找 Pa - Pp = 0 的解析点；
      若无法确定（被动始终大于主动），则取 1.2 倍开挖深度处作为名义零点。
     """
+    search_points = z_axis_data
+    if excavation_point is None:
+        excavation_point = build_excavation_point(z_axis_data, excavation_depth)
+    if excavation_point is not None:
+        search_points = merge_boundary_points(z_axis_data, [excavation_point])
+
     # 1. 尝试寻找解析零点 (Pa - Pp = 0)
-    for i in range(len(z_axis_data) - 1):
-        p_top = z_axis_data[i]
-        p_bot = z_axis_data[i+1]
+    for i in range(len(search_points) - 1):
+        p_top = search_points[i]
+        p_bot = search_points[i+1]
         
         if p_top.z < excavation_depth - 1e-4:
             continue
@@ -782,10 +813,11 @@ if __name__ == "__main__":
         
         # 2. 计算原始链上的压力，再单独求边界点
         update_passive_pressures(z_data, curr_excavation)
+        excavation_point = build_excavation_point(z_data, curr_excavation)
         boundary_results = BoundaryResults(
-            excavation_point=next((p for p in z_data if p.point_type == "Excavation"), None),
+            excavation_point=excavation_point,
             critical_points=find_critical_points(z_data, depth_pile, curr_excavation),
-            inflection_point=find_inflection_point(z_data, curr_excavation),
+            inflection_point=find_inflection_point(z_data, curr_excavation, excavation_point),
         )
 
         # for point in z_data:
