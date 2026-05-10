@@ -66,7 +66,7 @@ class BoundaryResults:
         points = []
         if self.excavation_point is not None:
             points.append(self.excavation_point)
-        points.extend(self.critical_points)
+            points.extend(self.critical_points)
         if self.inflection_point is not None:
             points.append(self.inflection_point)
         return points
@@ -80,7 +80,7 @@ class SoilLayer:
         self.unit_weight = unit_weight
         self.cohesion = cohesion      
         self.friction_angle = friction_angle
-    
+        
     def active_coefficient(self):
         """主动土压力系数 Ka"""
         phi_rad = math.radians(self.friction_angle)
@@ -116,7 +116,7 @@ def create_analysis_point(z, position, p_type, layer, current_sigma_v, z_top):
     point.point_type = p_type
     
     return point
-    
+
 def z_based_data_collection(layers, overload, excavation_depth):
     """
     以高度Z为核心构建整合数据链
@@ -163,7 +163,7 @@ def update_passive_pressures(z_data, excavation_depth):
             c_term = 2 * point.layer.cohesion * math.sqrt(kp)
             
             point.pp = round(sigma_v_p * kp + c_term, 2)
-        
+            
         # 顺便更新净压力
         point.p_net = round(point.pa - point.pp, 2)
 
@@ -290,7 +290,7 @@ def find_critical_points(z_axis_data, pile_top_z, excavation_depth):
                 critical_points.append(crit_point)
 
         i += 1
-    
+        
     return critical_points
 
 
@@ -434,7 +434,7 @@ def find_inflection_point(z_axis_data, excavation_depth, excavation_point=None):
             continue
         if abs(p_top.z - p_bot.z) <= DEPTH_TOLERANCE:
             continue
-             
+        
         # 判定是否存在符号翻转
         if p_top.p_net > 0 and p_bot.p_net < 0:
             target_z = round(
@@ -490,7 +490,7 @@ def calculate_force_and_centroid(p1, p2, force_type="pa"):
     if force_type == "pa":
         v1 = max(0.0, v1)
         v2 = max(0.0, v2)
-    
+        
     # 梯形面积公式 (合力)
     f = (v1 + v2) * h / 2
     
@@ -512,7 +512,7 @@ def identify_business_intervals(z_data, target_types=None):
     if target_types is None:
         # 默认处理这三种业务类型
         target_types = ["Critical", "Inflection", "Excavation"]
-    
+        
     # 配置映射：定义不同类型的搜索方向和目标边界
     # direction: 1 为向下(深)搜, -1 为向上(浅)搜
     # boundary: 目标边界标签
@@ -542,7 +542,7 @@ def identify_business_intervals(z_data, target_types=None):
                 search_range = range(i + 1, len(z_data))
             else:
                 search_range = range(i, -1, -1)
-            
+                
             # 执行查找
             for j in search_range:
                 # 严格匹配边界标签，并且通常建议匹配同一土层 (layer_index)
@@ -554,9 +554,9 @@ def identify_business_intervals(z_data, target_types=None):
                     else:
                         segment = [z_data[j], p]
                         up_intervals.append(segment)
-                    intervals.append(segment)
+                        intervals.append(segment)
                     break # 找到最近的一个边界后立即跳出当前点的搜寻
-    
+                
     # 补齐“向下区间”与“反弯点向上区间”之间跨层缺失区间
     # 典型场景：开挖较深时，反弯点在更深土层，导致中间层段遗漏
     if "Inflection" in target_types and down_intervals and up_intervals:
@@ -578,7 +578,7 @@ def identify_business_intervals(z_data, target_types=None):
                 
                 intervals.append([prev, curr])
                 prev = curr
-    
+                
     # 统一按深度从浅到深排序，便于后续计算与调试
     intervals.sort(key=lambda seg: (seg[0].z, seg[1].z))
     
@@ -809,117 +809,106 @@ def calculate_multi_strut_force(pressure_report, z_inflection, current_strut_pos
     current_force = -sum_moment / current_arm
     return abs(round(current_force, 2))
 
-# if __name__ == "__main__":
-#     depth_excavation = 8.5
-#     depth_pile = 1.5
-#     overload = 30
-#     depth_struc = 2             # 支撑点位置
-
-#     layers = [
-#         SoilLayer("杂填土", 0.6, 18.2, 6.0, 12.3),
-#         SoilLayer("素填士", 0.7, 18.7, 18.0, 12.3),
-#         SoilLayer("粉质黏土", 3.3, 19.0, 26.0, 14.3),
-#         SoilLayer("粉质黏土", 4.4, 19.8, 43.2, 21.0),
-#         SoilLayer("粉质黏土混卵砾石", 5.1, 20.5, 28.5, 23.5),
-#         SoilLayer("强风化粉砂岩", 7.4, 21.0, 28.5, 22.5),
-#         SoilLayer("中风化粉砂岩粉砂岩", 25.6, 22.2, 55.1, 30.7)
-#     ]
-    
-#     z_data = z_based_data_collection(layers, overload, depth_excavation)
-
-#     critical_list = find_and_insert_critical_depths(z_data, depth_pile)
-    
-#     update_passive_pressures(z_data, depth_excavation)
-
-#     find_and_insert_inflection_point(z_data, depth_excavation)
-#     # for point in z_data:
-#     #     #if point.point_type == "Critical" or point.point_type == "Interface" or point.point_type == "Inflection":
-#     #     print(f"高度: {point.z:>6}m | "
-#     #           f"位置: {point.position:<6} | "
-#     #           f"土层: {point.layer_name:<10} | "
-#     #           f"主动压力: {point.pa:>8} kPa | "
-#     #           f"被动压力: {point.pp:>8} kPa | "
-#     #           f"静土压力: {point.p_net:>8} kPa | "
-#     #           f"类型: {point.point_type:>8}"
-#     #           )
-
-#     result_pressure = compute_soil_pressure(z_data)
-#     print(result_pressure)
-
-#     depth_inflection = next(p.z for p in z_data if p.point_type == "Inflection")
-#     force = calculate_strut_force(result_pressure, depth_inflection, depth_struc)
-#     print(force)
-
-
 if __name__ == "__main__":
-    layers = [
-        SoilLayer("杂填土", 0.6, 18.2, 6.0, 12.3),
-        SoilLayer("素填士", 0.7, 18.7, 18.0, 12.3),
-        SoilLayer("粉质黏土", 3.3, 19.0, 26.0, 14.3),
-        SoilLayer("粉质黏土", 4.4, 19.8, 43.2, 21.0),
-        SoilLayer("粉质黏土混卵砾石", 5.1, 20.5, 28.5, 23.5),
-        SoilLayer("强风化粉砂岩", 7.4, 21.0, 28.5, 22.5),
-        SoilLayer("中风化粉砂岩粉砂岩", 25.6, 22.2, 55.1, 30.7)
-    ]
+    
+    depth_pile = 1.5 # 桩入土深度或特定参数
     # 定义施工工况：(当前开挖深度, 当前新增的支撑位置)
     # 第一步：开挖至 3.0m，加第一道支撑 at 2.0m
     # 第二步：开挖至 8.5m，加第二道支撑 at 7.0m
+    
     construction_stages = [
         {"excavation": 8.5, "strut": 2.0},
         {"excavation": 13, "strut": 8.0}
     ]
+
+    # 定义不同的计算工况/截面
+    scenarios = [
+        {
+            "name": "第一道截面",
+            "overload": 30,
+            "layers": [
+                SoilLayer("杂填土", 0.6, 18.2, 6.0, 12.3),
+                SoilLayer("素填士", 0.7, 18.7, 18.0, 12.3),
+                SoilLayer("粉质黏土", 3.3, 19.0, 26.0, 14.3),
+                SoilLayer("粉质黏土", 4.4, 19.8, 43.2, 21.0),
+                SoilLayer("粉质黏土混卵砾石", 5.1, 20.5, 28.5, 23.5),
+                SoilLayer("强风化粉砂岩", 7.4, 21.0, 28.5, 22.5),
+                SoilLayer("中风化粉砂岩粉砂岩", 25.6, 22.2, 55.1, 30.7)
+            ]
+        },
+        {
+            "name": "CD 截面",
+            "overload": 20,
+            "layers": [
+                SoilLayer("杂填土", 0.5, 18.2, 6.0, 12.3),
+                SoilLayer("素填士", 0.5, 18.7, 18.0, 12.3),
+                SoilLayer("粉质黏土", 4, 19.0, 26.0, 14.3),
+                SoilLayer("粉质黏土", 5.2, 19.8, 43.2, 21.0),
+                SoilLayer("粉质黏土混卵砾石", 4.3, 20.5, 28.5, 23.5),
+                SoilLayer("强风化粉砂岩", 8, 21.0, 28.5, 22.5),
+                SoilLayer("中风化粉砂岩粉砂岩", 23, 22.2, 55.1, 30.7)
+            ]
+        },
+        {
+            "name": "DA 截面",
+            "overload": 20,
+            "layers": [
+                SoilLayer("杂填土", 0.4, 18.2, 6.0, 12.3),
+                SoilLayer("素填士", 0.6, 18.7, 18.0, 12.3),
+                SoilLayer("粉质黏土", 5, 19.0, 26.0, 14.3),
+                SoilLayer("粉质黏土", 4.2, 19.8, 43.2, 21.0),
+                SoilLayer("粉质黏土混卵砾石", 4, 20.5, 28.5, 23.5),
+                SoilLayer("强风化粉砂岩", 6.8, 21.0, 28.5, 22.5),
+                SoilLayer("中风化粉砂岩粉砂岩", 27, 22.2, 55.1, 30.7)
+            ]
+        }
+    ]
     
-    overload = 30
-    depth_pile = 1.5 # 桩入土深度或特定参数
-    
-    installed_struts = []
-    # final_forces = []
+    for scenario in scenarios:
+        installed_struts = []
+        index = 1
+        print(f"===对于截面：{scenario["name"]}===")
+        z_data = None
+        for stage in construction_stages:
+            curr_excavation = stage["excavation"]
+            curr_strut = stage["strut"]
+            curr_layers = scenario["layers"]
+            curr_overload = scenario["overload"]
+            # 1. 重新生成当前开挖深度下的数据链
+            z_data = z_based_data_collection(curr_layers, curr_overload, curr_excavation)
+            # for point in z_data:
+            #     print(f"高度: {point.z:>6}m | "
+            #           f"位置: {point.position:<6} | "
+            #           f"土层: {point.layer_name:<10} | "
+            #           f"主动压力: {point.pa:>8} kPa | "
+            #           f"被动压力: {point.pp:>8} kPa | "
+            #           f"静土压力: {point.p_net:>8} kPa | "
+            #           f"类型: {point.point_type:>8}"
+            #           )
+            # 2. 计算原始链上的压力，再单独求边界点
+            update_passive_pressures(z_data, curr_excavation)
+            excavation_point = build_excavation_point(z_data, curr_excavation)
+            boundary_results = BoundaryResults(
+                excavation_point=excavation_point,
+                critical_points=find_critical_points(z_data, depth_pile, curr_excavation),
+                inflection_point=find_inflection_point(z_data, curr_excavation, excavation_point),
+            )
+            # 3. 计算当前工况的压力区间
+            result_pressure = compute_soil_pressure(z_data, boundary_results)
+            # print(result_pressure)
+            # 4. 获取当前工况的反弯点
+            if boundary_results.inflection_point is not None:
+                depth_inflection = boundary_results.inflection_point.z
 
-    index = 1
-    for stage in construction_stages:
-        curr_excavation = stage["excavation"]
-        curr_strut = stage["strut"]
-        
-        # 1. 重新生成当前开挖深度下的数据链
-        # 随着 excavation 改变，土压力分布和被动区起点都会改变
-        z_data = z_based_data_collection(layers, overload, curr_excavation)
-        
-        # 2. 计算原始链上的压力，再单独求边界点
-        update_passive_pressures(z_data, curr_excavation)
-        excavation_point = build_excavation_point(z_data, curr_excavation)
-        boundary_results = BoundaryResults(
-            excavation_point=excavation_point,
-            critical_points=find_critical_points(z_data, depth_pile, curr_excavation),
-            inflection_point=find_inflection_point(z_data, curr_excavation, excavation_point),
-        )
+                # 5. 计算支撑力
+                # 注意：在多支护计算中，通常是用“等值梁法”或其他简化法
+                # 这里沿用你对反弯点取矩的逻辑
+                # force = calculate_strut_force(result_pressure, depth_inflection, curr_strut)
+                force = calculate_multi_strut_force(result_pressure, depth_inflection, curr_strut, installed_struts)
 
-        # for point in z_data:
-        #     print(f"高度: {point.z:>6}m | "
-        #           f"位置: {point.position:<6} | "
-        #           f"土层: {point.layer_name:<10} | "
-        #           f"主动压力: {point.pa:>8} kPa | "
-        #           f"被动压力: {point.pp:>8} kPa | "
-        #           f"静土压力: {point.p_net:>8} kPa | "
-        #           f"类型: {point.point_type:>8}"
-        #           )
-        # 3. 计算当前工况的压力区间
-        result_pressure = compute_soil_pressure(z_data, boundary_results)
-        # print(result_pressure)
-        # 4. 获取当前工况的反弯点
-        if boundary_results.inflection_point is not None:
-            depth_inflection = boundary_results.inflection_point.z
-
-            # 5. 计算支撑力
-            # 注意：在多支护计算中，通常是用“等值梁法”或其他简化法
-            # 这里沿用你对反弯点取矩的逻辑
-            # force = calculate_strut_force(result_pressure, depth_inflection, curr_strut)
-            force = calculate_multi_strut_force(result_pressure, depth_inflection, curr_strut, installed_struts)
-
-            installed_struts.append({"pos": curr_strut, "force": force})
-            print(f"开挖至 {curr_excavation}m，支撑({curr_strut}m) 第{index}支撑轴力为: {force}")
-        else:
-            print(f"警告：开挖深度 {curr_excavation}m 处未发现反弯点，可能由于入土深度不足。")
-        index += 1
-    # 输出所有阶段结果
-    # for res in final_forces:
-    #     print(f"开挖至{res['stage_excavation']}m时，第{final_forces.index(res)+1}道支撑({res['strut_pos']}m)轴力: {res['force']} kN/m")
+                installed_struts.append({"pos": curr_strut, "force": force})
+                
+                print(f"开挖至 {curr_excavation}m，支撑({curr_strut}m) 第{index}支撑轴力为: {force}")
+            else:
+                print(f"警告：开挖深度 {curr_excavation}m 处未发现反弯点，可能由于入土深度不足。")
+                index += 1
