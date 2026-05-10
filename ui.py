@@ -17,7 +17,6 @@ class ResultViewer(tk.Toplevel):
     PROFILE_LEFT_MARGIN = 220
     PROFILE_RIGHT_MARGIN = 40
     ZONE_LABEL_Y_OFFSET = 14
-    DEPTH_LABEL_LEFT_OFFSET = 166
     MIN_LAYER_HEIGHT = 38
     MIN_THICKNESS_EPSILON = 1e-6
     PRESSURE_LABEL_OFFSET = 10
@@ -394,12 +393,13 @@ class ResultViewer(tk.Toplevel):
             self.canvas.create_rectangle(center_x, y1, profile_right, y2, fill="#FFE8DD", outline="#4A4E69")
             self.canvas.create_line(profile_left, y1, profile_right, y1, fill=color, width=2)
 
+            text_x = profile_left + 8
+
             self.canvas.create_text(
-                profile_left - 14,
-                label_y,
+                text_x,
+                y1 + 4,
                 text=layer["name"],
-                anchor="e",
-                width=150,
+                anchor="nw",
                 font=("微软雅黑", 9),
             )
 
@@ -422,10 +422,10 @@ class ResultViewer(tk.Toplevel):
             )
 
             self.canvas.create_text(
-                profile_left - self.DEPTH_LABEL_LEFT_OFFSET,
-                y2,
+                text_x,
+                y2 - 4,
                 text=f"{layer['bottom_depth']:.1f}m",
-                anchor="e",
+                anchor="sw",
                 fill="#475569",
             )
 
