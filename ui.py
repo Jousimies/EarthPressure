@@ -60,8 +60,8 @@ class ResultViewer(tk.Toplevel):
 
         left_frame = tk.LabelFrame(paned, text="土层数据", padx=8, pady=8)
         right_frame = tk.Frame(paned)
-        paned.add(left_frame, weight=3)
-        paned.add(right_frame, weight=4)
+        paned.add(left_frame, weight=1)
+        paned.add(right_frame, weight=1)
 
         layer_columns = ("index", "name", "thickness", "gamma", "c", "phi", "mode", "depth")
         self.layer_tree = ttk.Treeview(left_frame, columns=layer_columns, show="headings", height=16)
@@ -248,61 +248,147 @@ class ResultViewer(tk.Toplevel):
                 values=(item["range"], f"{item['force']:.2f}", f"{item['centroid_depth']:.2f}"),
             )
 
+    def _build_layer_layout(self, layers, top_margin, usable_height):
+        layer_count = len(layers)
+        if layer_count == 0:
+            return []
+
+        min_height = 38
+        base_height = min_height * layer_count
+        total_thickness = sum(max(layer["thickness"], 0.0) for layer in layers)
+        if total_thickness <= 0:
+            total_thickness = float(layer_count)
+
+        if base_height < usable_height:
+            extra_height = usable_height - base_height
+            layer_heights = [
+                min_height + extra_height * (max(layer["thickness"], 0.0) / total_thickness) for layer in layers
+            ]
+        else:
+            equal_height = usable_height / layer_count
+            layer_heights = [equal_height for _ in layers]
+
+        layout = []
+        current_y = top_margin
+        for layer, layer_height in zip(layers, layer_heights):
+            y1 = current_y
+            y2 = current_y + layer_height
+            layout.append(
+                {
+                    "layer": layer,
+                    "top_depth": layer["top_depth"],
+                    "bottom_depth": layer["bottom_depth"],
+                    "y1": y1,
+                    "y2": y2,
+                }
+            )
+            current_y = y2
+        return layout
+
+    def _depth_to_canvas_y(self, depth, layer_layout, top_margin, bottom_y):
+        if not layer_layout:
+            return top_margin
+        if depth <= layer_layout[0]["top_depth"]:
+            return layer_layout[0]["y1"]
+        if depth >= layer_layout[-1]["bottom_depth"]:
+            return bottom_y
+
+        for item in layer_layout:
+            if item["top_depth"] <= depth <= item["bottom_depth"]:
+                thickness = max(item["bottom_depth"] - item["top_depth"], 1e-6)
+                ratio = (depth - item["top_depth"]) / thickness
+                return item["y1"] + (item["y2"] - item["y1"]) * ratio
+        return bottom_y
+
+    def _layer_pressure_preview(self, points, layer):
+        pa_values = []
+        pp_values = []
+        for point in points:
+            if point["layer_name"] != layer["name"]:
+                continue
+            if not (layer["top_depth"] <= point["z"] <= layer["bottom_depth"]):
+                continue
+            pa_values.append(point["pa"])
+            pp_values.append(point["pp"])
+        pa = max(pa_values) if pa_values else 0.0
+        pp = max(pp_values) if pp_values else 0.0
+        return pa, pp
+
     def _draw_schematic(self, dataset, stage):
         self.canvas.delete("all")
         self.canvas.update_idletasks()
 
-        canvas_width = max(self.canvas.winfo_width(), 420)
+        canvas_width = max(self.canvas.winfo_width(), 620)
         canvas_height = max(self.canvas.winfo_height(), 420)
-        top_margin = 35
-        bottom_margin = 30
-        profile_left = 80
-        profile_right = 260
-
-        max_marker_depth = stage["excavation_depth"]
-        if stage["inflection_point"] is not None:
-            max_marker_depth = max(max_marker_depth, stage["inflection_point"]["z"])
-        for point in stage["critical_points"]:
-            max_marker_depth = max(max_marker_depth, point["z"])
-        total_depth = max(dataset["layers"][-1]["bottom_depth"], max_marker_depth)
-        depth_span = max(total_depth, 1.0)
+        top_margin = 44
+        bottom_margin = 32
         usable_height = canvas_height - top_margin - bottom_margin
+        bottom_y = canvas_height - bottom_margin
+        layer_layout = self._build_layer_layout(dataset["layers"], top_margin, usable_height)
 
-        self.canvas.create_line(profile_left, top_margin, profile_left, canvas_height - bottom_margin, width=2)
-        self.canvas.create_line(profile_right, top_margin, profile_right, canvas_height - bottom_margin, width=2)
-        self.canvas.create_text((profile_left + profile_right) / 2, 16, text="土层剖面", font=("微软雅黑", 11, "bold"))
+        profile_left = 220
+        profile_right = canvas_width - 40
+        center_x = (profile_left + profile_right) / 2
 
-        for index, layer in enumerate(dataset["layers"]):
-            y1 = top_margin + usable_height * (layer["top_depth"] / depth_span)
-            y2 = top_margin + usable_height * (layer["bottom_depth"] / depth_span)
-            color = self.LAYER_COLORS[index % len(self.LAYER_COLORS)]
-            self.canvas.create_rectangle(profile_left, y1, profile_right, y2, fill=color, outline="#4A4E69")
+        self.canvas.create_text(center_x, 18, text="土层压力示意（左被动 / 右主动）", font=("微软雅黑", 11, "bold"))
+        self.canvas.create_text(center_x - 120, 32, text="被动土压力 Pp", fill="#1D4ED8", font=("微软雅黑", 9, "bold"))
+        self.canvas.create_text(center_x + 120, 32, text="主动土压力 Pa", fill="#D62828", font=("微软雅黑", 9, "bold"))
+
+        self.canvas.create_line(profile_left, top_margin, profile_left, bottom_y, width=1, fill="#64748B")
+        self.canvas.create_line(profile_right, top_margin, profile_right, bottom_y, width=1, fill="#64748B")
+        self.canvas.create_line(center_x, top_margin, center_x, bottom_y, width=3, fill="#111827")
+
+        points = stage.get("points", [])
+        for index, item in enumerate(layer_layout):
+            layer = item["layer"]
+            y1 = item["y1"]
+            y2 = item["y2"]
             label_y = (y1 + y2) / 2
+            color = self.LAYER_COLORS[index % len(self.LAYER_COLORS)]
+
+            self.canvas.create_rectangle(profile_left, y1, center_x, y2, fill="#DDEFFF", outline="#4A4E69")
+            self.canvas.create_rectangle(center_x, y1, profile_right, y2, fill="#FFE8DD", outline="#4A4E69")
+            self.canvas.create_line(profile_left, y1, profile_right, y1, fill=color, width=2)
+
             self.canvas.create_text(
-                (profile_left + profile_right) / 2,
+                profile_left - 14,
                 label_y,
-                text=f"{layer['name']}\n{layer['top_depth']:.1f}-{layer['bottom_depth']:.1f}m",
+                text=f"{layer['name']}\n{layer['thickness']:.2f}m",
+                anchor="e",
                 width=150,
                 font=("微软雅黑", 9),
             )
-            self.canvas.create_text(profile_left - 30, y1, text=f"{layer['top_depth']:.1f}", anchor="e")
 
-        self.canvas.create_text(profile_left - 30, canvas_height - bottom_margin, text=f"{depth_span:.1f}", anchor="e")
-        self._draw_depth_marker(profile_left, profile_right, top_margin, usable_height, depth_span, stage["excavation_depth"], "#D62828", "开挖面")
+            pp, pa = self._layer_pressure_preview(points, layer)
+            self.canvas.create_text(center_x - 10, label_y, text=f"Pp≈{pp:.1f}", anchor="e", fill="#1D4ED8", font=("微软雅黑", 9))
+            self.canvas.create_text(center_x + 10, label_y, text=f"Pa≈{pa:.1f}", anchor="w", fill="#D62828", font=("微软雅黑", 9))
+
+            self.canvas.create_text(profile_left - 166, y1, text=f"{layer['top_depth']:.1f}m", anchor="e", fill="#475569")
+
+        if layer_layout:
+            self.canvas.create_text(
+                profile_left - 166,
+                layer_layout[-1]["y2"],
+                text=f"{layer_layout[-1]['bottom_depth']:.1f}m",
+                anchor="e",
+                fill="#475569",
+            )
+
+        self._draw_depth_marker(profile_left, profile_right, layer_layout, top_margin, bottom_y, stage["excavation_depth"], "#D62828", "开挖面")
 
         if stage["strut_depth"] is not None:
-            y = top_margin + usable_height * (stage["strut_depth"] / depth_span)
-            self.canvas.create_line(profile_right + 10, y, canvas_width - 160, y, fill="#1D4ED8", width=3)
-            self.canvas.create_oval(canvas_width - 168, y - 6, canvas_width - 156, y + 6, fill="#1D4ED8", outline="")
-            self.canvas.create_text(canvas_width - 148, y, text=f"支撑 {stage['strut_depth']:.2f}m", anchor="w", fill="#1D4ED8")
+            y = self._depth_to_canvas_y(stage["strut_depth"], layer_layout, top_margin, bottom_y)
+            self.canvas.create_line(center_x, y, profile_right - 8, y, fill="#1D4ED8", width=3)
+            self.canvas.create_oval(profile_right - 14, y - 5, profile_right - 4, y + 5, fill="#1D4ED8", outline="")
+            self.canvas.create_text(profile_right - 2, y, text=f"支撑 {stage['strut_depth']:.2f}m", anchor="w", fill="#1D4ED8")
 
         if stage["inflection_point"] is not None:
             self._draw_depth_marker(
                 profile_left,
                 profile_right,
+                layer_layout,
                 top_margin,
-                usable_height,
-                depth_span,
+                bottom_y,
                 stage["inflection_point"]["z"],
                 "#7B2CBF",
                 "反弯点",
@@ -312,17 +398,17 @@ class ResultViewer(tk.Toplevel):
             self._draw_depth_marker(
                 profile_left,
                 profile_right,
+                layer_layout,
                 top_margin,
-                usable_height,
-                depth_span,
+                bottom_y,
                 point["z"],
                 "#FF8800",
                 "临界点",
                 offset=20,
             )
 
-    def _draw_depth_marker(self, left, right, top_margin, usable_height, depth_span, depth, color, label, offset=0):
-        y = top_margin + usable_height * (depth / depth_span)
+    def _draw_depth_marker(self, left, right, layer_layout, top_margin, bottom_y, depth, color, label, offset=0):
+        y = self._depth_to_canvas_y(depth, layer_layout, top_margin, bottom_y)
         self.canvas.create_line(left - 10, y, right + 10, y, fill=color, width=2, dash=(6, 4))
         self.canvas.create_text(right + 20 + offset, y, text=f"{label} {depth:.2f}m", anchor="w", fill=color)
 
