@@ -174,6 +174,14 @@ def get_layer_top_point(z_axis_data, layer_index):
     return None
 
 
+def get_layer_bottom_point(z_axis_data, layer_index):
+    """返回指定土层的层底分析点；若不存在则返回 None。"""
+    for point in z_axis_data:
+        if point.layer_index == layer_index and point.position == "BOTTOM":
+            return point
+    return None
+
+
 def clone_as_boundary_point(source_point, point_type):
     """
     基于现有分析点克隆独立边界点，避免手工逐字段拷贝。
@@ -622,6 +630,80 @@ def build_continuous_segments(z_data, start_point, end_point, boundary_points=No
     ]
 
 
+def is_at_or_below_depth(current_depth, boundary_depth, tolerance=DEPTH_TOLERANCE):
+    """判断当前深度是否已到达或超过目标边界深度（含容差）。"""
+    return current_depth >= boundary_depth - tolerance
+
+
+def calculate_active_pressure_segments(z_data, boundary_results):
+    """
+    计算主动土压力分段：
+    - 单个临界点：取临界点至反弯点之间的连续土层；
+    - 多个临界点：前置临界点各取至本层层底，最后一个临界点取至反弯点。
+    """
+    critical_points = sorted(boundary_results.critical_points, key=lambda p: p.z)
+    inflection_point = boundary_results.inflection_point
+    if not critical_points or inflection_point is None:
+        return []
+
+    boundary_points = boundary_results.all_boundary_points()
+
+    if len(critical_points) == 1:
+        return build_continuous_segments(
+            z_data,
+            critical_points[0],
+            inflection_point,
+            boundary_points,
+        )
+
+    segments = []
+
+    for critical_point in critical_points[:-1]:
+        bottom_point = get_layer_bottom_point(z_data, critical_point.layer_index)
+        if bottom_point is None or is_at_or_below_depth(critical_point.z, bottom_point.z):
+            continue
+        segments.extend(
+            build_continuous_segments(
+                z_data,
+                critical_point,
+                bottom_point,
+                boundary_points,
+            )
+        )
+
+    last_critical_point = critical_points[-1]
+    if is_at_or_below_depth(last_critical_point.z, inflection_point.z):
+        return segments
+
+    segments.extend(
+        build_continuous_segments(
+            z_data,
+            last_critical_point,
+            inflection_point,
+            boundary_points,
+        )
+    )
+    return segments
+
+
+def calculate_passive_pressure_segments(z_data, boundary_results):
+    """计算被动土压力分段，范围为开挖面至反弯点之间的连续土层。"""
+    excavation_point = boundary_results.excavation_point
+    inflection_point = boundary_results.inflection_point
+    if excavation_point is None or inflection_point is None:
+        return []
+
+    if is_at_or_below_depth(excavation_point.z, inflection_point.z):
+        return []
+
+    return build_continuous_segments(
+        z_data,
+        excavation_point,
+        inflection_point,
+        boundary_results.all_boundary_points(),
+    )
+
+
 def build_boundary_results_from_z_data(z_data):
     """
     从旧版混合 z_data 中提取边界结果。
@@ -640,18 +722,9 @@ def compute_soil_pressure(z_data, boundary_results=None):
     if boundary_results is None:
         boundary_results = build_boundary_results_from_z_data(z_data)
 
-    critical_point = boundary_results.last_critical_point()
-    inflection_point = boundary_results.inflection_point
-    excavation_point = boundary_results.excavation_point
-
-    if critical_point is None or inflection_point is None or excavation_point is None:
-        return report
-
-    boundary_points = boundary_results.all_boundary_points()
-
     # --- 主动土压力计算 ---
-    # 范围：从临界点到反弯点之间的土层
-    active_segments = build_continuous_segments(z_data, critical_point, inflection_point, boundary_points)
+    # 范围：单个临界点时取临界点至反弯点；多个临界点时取各临界点至本层层底，以及最后一个临界点至反弯点。
+    active_segments = calculate_active_pressure_segments(z_data, boundary_results)
     for seg in active_segments:
         f, z_c_rel = calculate_force_and_centroid(seg[0], seg[1], "pa")
         z_c = seg[1].z - z_c_rel
@@ -659,8 +732,8 @@ def compute_soil_pressure(z_data, boundary_results=None):
             report["active"].append({"range": f"{seg[0].z}-{seg[1].z}", "f": f, "z_c": z_c})
 
     # --- 被动土压力计算 ---
-    # 范围：从开挖点到临界点之间的土层
-    passive_segments = build_continuous_segments(z_data, excavation_point, critical_point, boundary_points)
+    # 范围：从开挖点到反弯点之间的所有土层。
+    passive_segments = calculate_passive_pressure_segments(z_data, boundary_results)
     for seg in passive_segments:
         f, z_c_rel = calculate_force_and_centroid(seg[0], seg[1], "pp")
         z_c = seg[1].z - z_c_rel
