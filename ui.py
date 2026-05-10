@@ -262,26 +262,28 @@ class ResultViewer(tk.Toplevel):
 
         min_height = self.MIN_LAYER_HEIGHT
         base_height = min_height * layer_count
-        total_thickness = sum(self._get_safe_thickness(layer) for layer in layers)
+        safe_thicknesses = [self._get_safe_thickness(layer) for layer in layers]
+        total_thickness = sum(safe_thicknesses)
         if total_thickness <= 0:
             # 当输入厚度全部异常时采用平均分配，避免除零并保持图形可读性。
             total_thickness = float(layer_count)
 
         if base_height < usable_height:
             extra_height = usable_height - base_height
-            layer_heights = [min_height + extra_height * (self._get_safe_thickness(layer) / total_thickness) for layer in layers]
+            layer_heights = [min_height + extra_height * (safe_thickness / total_thickness) for safe_thickness in safe_thicknesses]
         else:
             equal_height = usable_height / layer_count
             layer_heights = [equal_height for _ in layers]
 
         layout = []
         current_y = top_margin
-        for layer, layer_height in zip(layers, layer_heights):
+        for layer, layer_height, safe_thickness in zip(layers, layer_heights, safe_thicknesses):
             y1 = current_y
             y2 = current_y + layer_height
             layout.append(
                 {
                     "layer": layer,
+                    "thickness": safe_thickness,
                     "top_depth": layer["top_depth"],
                     "bottom_depth": layer["bottom_depth"],
                     "y1": y1,
@@ -302,7 +304,7 @@ class ResultViewer(tk.Toplevel):
 
         for item in layer_layout:
             if item["top_depth"] <= depth <= item["bottom_depth"]:
-                thickness = max(item["bottom_depth"] - item["top_depth"], self.MIN_THICKNESS_EPSILON)
+                thickness = max(item["thickness"], self.MIN_THICKNESS_EPSILON)
                 ratio = (depth - item["top_depth"]) / thickness
                 return item["y1"] + (item["y2"] - item["y1"]) * ratio
         return bottom_y
