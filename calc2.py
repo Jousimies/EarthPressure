@@ -629,6 +629,10 @@ def build_continuous_segments(z_data, start_point, end_point, boundary_points=No
     ]
 
 
+def is_at_or_below_depth(current_depth, boundary_depth, tolerance=DEPTH_TOLERANCE):
+    return current_depth >= boundary_depth - tolerance
+
+
 def calculate_active_pressure_segments(z_data, boundary_results):
     critical_points = sorted(boundary_results.critical_points, key=lambda p: p.z)
     inflection_point = boundary_results.inflection_point
@@ -649,7 +653,7 @@ def calculate_active_pressure_segments(z_data, boundary_results):
 
     for critical_point in critical_points[:-1]:
         bottom_point = get_layer_bottom_point(z_data, critical_point.layer_index)
-        if bottom_point is None or critical_point.z >= bottom_point.z - DEPTH_TOLERANCE:
+        if bottom_point is None or is_at_or_below_depth(critical_point.z, bottom_point.z):
             continue
         segments.extend(
             build_continuous_segments(
@@ -661,7 +665,7 @@ def calculate_active_pressure_segments(z_data, boundary_results):
         )
 
     last_critical_point = critical_points[-1]
-    if last_critical_point.z >= inflection_point.z - DEPTH_TOLERANCE:
+    if is_at_or_below_depth(last_critical_point.z, inflection_point.z):
         return segments
 
     segments.extend(
@@ -681,7 +685,7 @@ def calculate_passive_pressure_segments(z_data, boundary_results):
     if excavation_point is None or inflection_point is None:
         return []
 
-    if excavation_point.z >= inflection_point.z - DEPTH_TOLERANCE:
+    if is_at_or_below_depth(excavation_point.z, inflection_point.z):
         return []
 
     return build_continuous_segments(
