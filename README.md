@@ -64,3 +64,6 @@ class AnalysisPoint:
 
 # 三、运行与调试
 在终端输入 python3 calc.py
+
+# 四、通信图
+- calc2.py 通信图：`/home/runner/work/EarthPressure/EarthPressure/calc2_通信图.md`
