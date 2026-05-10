@@ -1,4 +1,5 @@
 import math
+import copy
 from dataclasses import dataclass, field
 from typing import List, Optional
 
@@ -177,15 +178,7 @@ def clone_as_boundary_point(source_point, point_type):
     """
     基于现有分析点克隆独立边界点，避免手工逐字段拷贝。
     """
-    point = AnalysisPoint(source_point.z, source_point.position, source_point.layer_index, source_point.layer)
-    point.layer_name = source_point.layer_name
-    point.sigma_v = source_point.sigma_v
-    point.pa = source_point.pa
-    point.pp = source_point.pp
-    point.p_net = source_point.p_net
-    point.cum_force = source_point.cum_force
-    point.cum_moment = source_point.cum_moment
-    point.is_active_zone = source_point.is_active_zone
+    point = copy.copy(source_point)
     point.point_type = point_type
     return point
 
@@ -418,9 +411,11 @@ def find_inflection_point(z_axis_data, excavation_depth, excavation_point=None):
     """
     search_points = z_axis_data
     if excavation_point is None:
-        excavation_point = build_excavation_point(z_axis_data, excavation_depth)
-    if excavation_point is not None:
-        search_points = merge_boundary_points(z_axis_data, [excavation_point])
+        computed_excavation_point = build_excavation_point(z_axis_data, excavation_depth)
+    else:
+        computed_excavation_point = excavation_point
+    if computed_excavation_point is not None:
+        search_points = merge_boundary_points(z_axis_data, [computed_excavation_point])
 
     # 1. 尝试寻找解析零点 (Pa - Pp = 0)
     for i in range(len(search_points) - 1):
