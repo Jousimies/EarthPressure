@@ -181,6 +181,15 @@ def get_layer_top_point(z_axis_data, layer_index):
 
 
 def populate_boundary_point_data(point, excavation_depth, z_axis_data, force_pa_zero=False, force_p_net_zero=False):
+    """
+    为独立边界点补齐应力与压力数据。
+    :param point: 需要补算的边界点对象
+    :param excavation_depth: 当前开挖深度
+    :param z_axis_data: 原始分析链，仅用于读取层顶基准数据
+    :param force_pa_zero: 是否强制将主动土压力设为 0（用于临界点）
+    :param force_p_net_zero: 是否强制将净压力设为 0（用于反弯点）
+    :return: 补算完成后的边界点对象
+    """
     layer_top_point = get_layer_top_point(z_axis_data, point.layer_index)
     if layer_top_point is None:
         return point
@@ -340,6 +349,15 @@ def find_insert_index_in_layer(z_axis_data, layer_info, target_depth, tolerance=
     return insert_index
 
 def create_interpolated_boundary_point(p_top, p_bot, target_z, point_type, force_p_net_zero=False):
+    """
+    在线性变化区间内按深度插值生成边界点。
+    :param p_top: 区间浅端点
+    :param p_bot: 区间深端点
+    :param target_z: 目标深度
+    :param point_type: 边界点类型
+    :param force_p_net_zero: 是否强制将净压力设为 0
+    :return: 插值后的边界点对象
+    """
     if abs(p_bot.z - p_top.z) <= DEPTH_TOLERANCE:
         ratio = 0.0
     else:
@@ -522,6 +540,10 @@ def identify_business_intervals(z_data, target_types=None):
     return intervals
 
 def merge_boundary_points(z_data, boundary_points):
+    """
+    将独立边界点按深度合并到原始分析链的副本中。
+    已存在于链中的点会被跳过；其余点按深度排序后插入对应土层区间。
+    """
     merged_points = list(z_data)
 
     for point in sorted(boundary_points, key=lambda item: item.z):
@@ -563,6 +585,10 @@ def build_continuous_segments(z_data, start_point, end_point, boundary_points=No
 
 
 def build_boundary_results_from_z_data(z_data):
+    """
+    从旧版混合 z_data 中提取边界结果。
+    该函数仅用于兼容仍然把业务边界点直接写入 z_data 的旧调用方式。
+    """
     return BoundaryResults(
         excavation_point=next((p for p in z_data if p.point_type == "Excavation"), None),
         critical_points=[p for p in z_data if p.point_type == "Critical"],
