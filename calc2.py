@@ -55,11 +55,13 @@ class BoundaryResults:
     inflection_point: Optional[AnalysisPoint] = None
 
     def primary_critical_point(self):
+        """返回控制计算范围的最后一个临界点；若不存在则返回 None。"""
         if not self.critical_points:
             return None
         return self.critical_points[-1]
 
     def computed_points(self):
+        """返回所有独立求得的边界点，供局部合并后的分段计算使用。"""
         points = list(self.critical_points)
         if self.inflection_point is not None:
             points.append(self.inflection_point)
@@ -255,7 +257,7 @@ def find_critical_points(z_axis_data, pile_top_z, excavation_depth):
                     force_pa_zero=True,
                 )
                 critical_points.append(crit_point)
-                 
+
         i += 1
     
     return critical_points
@@ -426,6 +428,7 @@ def find_inflection_point(z_axis_data, excavation_depth):
 
 
 def find_and_insert_inflection_point(z_axis_data, excavation_depth):
+    """兼容旧接口，内部直接委托给 `find_inflection_point`。"""
     return find_inflection_point(z_axis_data, excavation_depth)
 
 def calculate_force_and_centroid(p1, p2, force_type="pa"):
@@ -539,14 +542,14 @@ def identify_business_intervals(z_data, target_types=None):
     
     return intervals
 
-def merge_boundary_points(z_data, boundary_points):
+def merge_boundary_points(z_data, boundary_points) -> List[AnalysisPoint]:
     """
     将独立边界点按深度合并到原始分析链的副本中。
     已存在于链中的点会被跳过；其余点按深度排序后插入对应土层区间。
     """
     merged_points = list(z_data)
 
-    for point in sorted(boundary_points, key=lambda item: item.z):
+    for point in sorted(boundary_points, key=lambda p: p.z):
         if point in merged_points:
             continue
 
