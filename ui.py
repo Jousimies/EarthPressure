@@ -11,6 +11,9 @@ from calc2 import (
 
 
 class ResultViewer(tk.Toplevel):
+    MIN_CANVAS_WIDTH = 620
+    TOP_MARGIN = 44
+    BOTTOM_MARGIN = 32
     MIN_LAYER_HEIGHT = 38
     MIN_THICKNESS_EPSILON = 1e-6
     PRESSURE_LABEL_OFFSET = 10
@@ -254,6 +257,7 @@ class ResultViewer(tk.Toplevel):
             )
 
     def _build_layer_layout(self, layers, top_margin, usable_height):
+        """按土层厚度生成缩放后的垂向布局，并保证每层最小可视高度。"""
         layer_count = len(layers)
         if layer_count == 0:
             return []
@@ -262,6 +266,7 @@ class ResultViewer(tk.Toplevel):
         base_height = min_height * layer_count
         total_thickness = sum(self._get_safe_thickness(layer) for layer in layers)
         if total_thickness <= 0:
+            # 当输入厚度全部异常时采用平均分配，避免除零并保持图形可读性。
             total_thickness = float(layer_count)
 
         if base_height < usable_height:
@@ -289,6 +294,7 @@ class ResultViewer(tk.Toplevel):
         return layout
 
     def _depth_to_canvas_y(self, depth, layer_layout, top_margin, bottom_y):
+        """将真实深度映射到缩放后示意图的画布 Y 坐标。"""
         if not layer_layout:
             return top_margin
         if depth <= layer_layout[0]["top_depth"]:
@@ -304,9 +310,11 @@ class ResultViewer(tk.Toplevel):
         return bottom_y
 
     def _get_safe_thickness(self, layer):
+        """返回非负厚度，避免异常输入导致布局计算错误。"""
         return max(layer["thickness"], 0.0)
 
     def _layer_pressure_preview(self, points, layer):
+        """提取该土层内的代表性被动/主动压力峰值用于示意标注。"""
         active_pressure_values = []
         passive_pressure_values = []
         for point in points:
@@ -324,10 +332,10 @@ class ResultViewer(tk.Toplevel):
         self.canvas.delete("all")
         self.canvas.update_idletasks()
 
-        canvas_width = max(self.canvas.winfo_width(), 620)
+        canvas_width = max(self.canvas.winfo_width(), self.MIN_CANVAS_WIDTH)
         canvas_height = max(self.canvas.winfo_height(), 420)
-        top_margin = 44
-        bottom_margin = 32
+        top_margin = self.TOP_MARGIN
+        bottom_margin = self.BOTTOM_MARGIN
         usable_height = canvas_height - top_margin - bottom_margin
         bottom_y = canvas_height - bottom_margin
         layer_layout = self._build_layer_layout(dataset["layers"], top_margin, usable_height)
